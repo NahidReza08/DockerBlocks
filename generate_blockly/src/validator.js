@@ -1,4 +1,5 @@
 import { isParserRule } from './ast-utils.js';
+import { createValidationError } from './validation-error.js';
 
 /**
  * Node types currently supported end-to-end (parser rules, groups,
@@ -51,10 +52,14 @@ export function validateGrammar(grammar, options = {}) {
     }
 
     if (errors.length) {
-        throw new Error(
+        const validationError = new Error(
             "Grammar uses unsupported constructs:\n" +
-            errors.map(e => ` - ${e}`).join("\n")
+            errors.map(e => ` - ${e.message}`).join("\n")
         );
+
+        validationError.validationErrors = errors;
+
+        throw validationError;
     }
 
     return true;
@@ -65,12 +70,20 @@ export function validateGrammar(grammar, options = {}) {
             return;
 
         if (!allowedTypes.has(node.$type)) {
-            errors.push(`${context}: unsupported node type "${node.$type}"`);
+            errors.push(createValidationError({
+                type: 'unsupported-node-type',
+                message: `${context}: unsupported node type "${node.$type}"`,
+                severity: 'error'
+            }));
             return; // don't descend into an already-unsupported subtree
         }
 
         if ('cardinality' in node && !allowedCardinalities.has(node.cardinality)) {
-            errors.push(`${context}: unsupported cardinality "${node.cardinality}"`);
+            errors.push(createValidationError({
+                type: 'unsupported-cardinality',
+                message: `${context}: unsupported cardinality "${node.cardinality}"`,
+                severity: 'error'
+            }));
         }
 
         switch (node.$type) {
