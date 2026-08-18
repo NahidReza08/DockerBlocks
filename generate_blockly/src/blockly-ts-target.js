@@ -322,6 +322,7 @@ type UiValidationError = {
   severity: string;
   line?: number;
   column?: number;
+  blockId?: string;
 };
 
 const capturedValidationErrors = validationErrors as UiValidationError[];
@@ -333,6 +334,35 @@ const workspace = Blockly.inject('blocklyDiv', {
 
 const codeOutput = document.getElementById('codeOutput');
 const errorOutput = document.getElementById('errorOutput');
+
+const VALIDATION_WARNING_ID = 'captured-validation-error';
+
+function updateBlockValidationWarnings() {
+  workspace.getAllBlocks(false).forEach((block) => {
+    block.setWarningText(null, VALIDATION_WARNING_ID);
+  });
+
+  const messagesByBlockId = new Map<string, string[]>();
+
+  capturedValidationErrors.forEach((error) => {
+    if (!error.blockId) return;
+
+    const messages = messagesByBlockId.get(error.blockId) ?? [];
+    messages.push(error.message);
+    messagesByBlockId.set(error.blockId, messages);
+  });
+
+  messagesByBlockId.forEach((messages, blockId) => {
+    const block = workspace.getBlockById(blockId);
+
+    if (!block) return;
+
+    block.setWarningText(
+      messages.join('\\n'),
+      VALIDATION_WARNING_ID
+    );
+  });
+}
 
 function formatValidationError(error: UiValidationError): string {
   let location = '';
@@ -376,7 +406,14 @@ function generateCode() {
   }
 }
 
+function handleWorkspaceChange() {
+  generateCode();
+  updateBlockValidationWarnings();
+}
+
 showCapturedValidationErrors();
-workspace.addChangeListener(generateCode);
+updateBlockValidationWarnings();
+
+workspace.addChangeListener(handleWorkspaceChange);
 `;
 }
