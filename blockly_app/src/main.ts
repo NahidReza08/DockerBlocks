@@ -12,7 +12,7 @@ type UiValidationError = {
   blockId?: string;
 };
 
-const capturedValidationErrors = validationErrors as UiValidationError[];
+let capturedValidationErrors = [...validationErrors] as UiValidationError[];
 
 // Define custom blocks before setting up the workspace
 defineBlocks();
@@ -135,6 +135,21 @@ function showCapturedValidationErrors() {
   });
 }
 
+function refreshValidationState(nextErrors: UiValidationError[]) {
+  capturedValidationErrors = [...nextErrors];
+
+  showCapturedValidationErrors();
+  updateBlockValidationWarnings();
+}
+
+function removeValidationErrorsForBlock(blockId: string) {
+  const nextErrors = capturedValidationErrors.filter(
+    (error) => error.blockId !== blockId
+  );
+
+  refreshValidationState(nextErrors);
+}
+
 function generateCode() {
   try {
     const code = generator.workspaceToCode(workspace);
@@ -154,13 +169,40 @@ function generateCode() {
   }
 }
 
-function handleWorkspaceChange() {
+function handleWorkspaceChange(event: Blockly.Events.Abstract) {
   generateCode();
+
+  if (
+    event.type === Blockly.Events.BLOCK_DELETE &&
+    'ids' in event &&
+    Array.isArray(event.ids)
+  ) {
+    const deletedBlockIds = event.ids.filter(
+      (id): id is string => typeof id === 'string'
+    );
+
+    const nextErrors = capturedValidationErrors.filter(
+      (error) =>
+        !error.blockId || !deletedBlockIds.includes(error.blockId)
+    );
+
+    refreshValidationState(nextErrors);
+    return;
+  }
+
+  if (
+    event.type === Blockly.Events.BLOCK_CHANGE &&
+    'blockId' in event &&
+    typeof event.blockId === 'string'
+  ) {
+    removeValidationErrorsForBlock(event.blockId);
+    return;
+  }
+
   updateBlockValidationWarnings();
 }
 
-showCapturedValidationErrors();
-updateBlockValidationWarnings();
+refreshValidationState(capturedValidationErrors);
 
 // Generate code and refresh validation warnings whenever the workspace changes
 workspace.addChangeListener(handleWorkspaceChange);
