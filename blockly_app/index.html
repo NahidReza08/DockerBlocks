@@ -110,10 +110,42 @@
       }
 
       #errorOutput {
-        background: #fef2f2;
-        color: #dc2626;
-        border-top: 1px solid #fee2e2;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background: #f8fafc;
+        color: var(--text-main);
+        border-top: 1px solid var(--border-color);
+      }
+
+      .validation-status {
+        color: #64748b;
         font-weight: 500;
+      }
+
+      .validation-error {
+        padding: 12px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+      }
+
+      .validation-error-title {
+        margin-bottom: 4px;
+        color: #b91c1c;
+        font-weight: 700;
+      }
+
+      .validation-error-message {
+        color: #7f1d1d;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .validation-error-location {
+        margin-top: 6px;
+        color: #991b1b;
+        font-size: 12px;
       }
 
       /* Responsive layout for smaller screens */
@@ -154,7 +186,7 @@
 
         <div class="card output-pane" style="flex: 0.8;">
           <div class="card-header">Console Errors</div>
-          <pre id="errorOutput">No errors detected.</pre>
+          <div id="errorOutput">No errors detected.</div>
         </div>
       </div>
     </div>
