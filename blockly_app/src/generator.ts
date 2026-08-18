@@ -1,6 +1,6 @@
 import * as Blockly from 'blockly';
 
-import { javascriptGenerator } from 'blockly/javascript';
+import { javascriptGenerator, Order } from 'blockly/javascript';
 export const generator = javascriptGenerator;
 
 generator.INDENT = '  ';
@@ -14,7 +14,7 @@ function dedentOnce(code: string): string {
 
 generator.forBlock['project'] = function (block: Blockly.Block): string {
   const name = block.getFieldValue('NAME');
-  const metadata = generator.valueToCode(block, 'METADATA', generator.ORDER_NONE) || '';
+  const metadata = generator.valueToCode(block, 'METADATA', Order.NONE) || '';
   const members = dedentOnce(generator.statementToCode(block, 'MEMBERS').replace(/\n$/, ''));
   const modules = dedentOnce(generator.statementToCode(block, 'MODULES').replace(/\n$/, ''));
   const tasks = dedentOnce(generator.statementToCode(block, 'TASKS').replace(/\n$/, ''));
@@ -56,8 +56,8 @@ generator.forBlock['task'] = function (block: Blockly.Block): string {
   const title = block.getFieldValue('TITLE');
   const priority = block.getFieldValue('PRIORITY');
   const status = block.getFieldValue('STATUS');
-  const assignee = generator.valueToCode(block, 'ASSIGNEE', generator.ORDER_NONE) || '';
-  const module = generator.valueToCode(block, 'MODULE', generator.ORDER_NONE) || '';
+  const assignee = generator.valueToCode(block, 'ASSIGNEE', Order.NONE) || '';
+  const module = generator.valueToCode(block, 'MODULE', Order.NONE) || '';
   const estimate = block.getFieldValue('ESTIMATE');
   const subtasks = generator.statementToCode(block, 'SUBTASKS').replace(/\n$/, '');
   const code = ("task" + ' ' + title + ' ' + priority + ' ' + status + ' ' + assignee + ' ' + module + ' ' + estimate + ' ' + "{" + '\n' + subtasks + '\n' + "}").trim();

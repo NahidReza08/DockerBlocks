@@ -214,7 +214,7 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
             setupLines.push(`  const ${varName} = block.getFieldValue('${argName}') || 'Unnamed';`);
             items.push({ frag: varName, multiline: false });
         } else if (part.kind === "value") {
-            setupLines.push(`  const ${varName} = generator.valueToCode(block, '${argName}', generator.ORDER_NONE) || '';`);
+            setupLines.push(`  const ${varName} = generator.valueToCode(block, '${argName}', Order.NONE) || '';`);
             items.push({ frag: varName, multiline: false });
         } else if (part.kind === "statement") {
             const raw = `generator.statementToCode(block, '${argName}').replace(/\\n$/, '')`;
@@ -243,7 +243,7 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
             `generator.forBlock['${blockType}'] = function (block: Blockly.Block) {`,
             ...setupLines,
             `  const code = (${codeExpr}).trim();`,
-            `  return [code, generator.ORDER_ATOMIC];`,
+            `  return [code, Order.ATOMIC];`,
             `};`
         ].join("\n");
     } else {
@@ -264,7 +264,7 @@ export function generateGeneratorTs(irRules) {
 
     return `import * as Blockly from 'blockly';
 
-import { javascriptGenerator } from 'blockly/javascript';
+import { javascriptGenerator, Order } from 'blockly/javascript';
 export const generator = javascriptGenerator;
 
 generator.INDENT = '  ';
