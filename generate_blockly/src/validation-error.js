@@ -41,11 +41,11 @@ export function createValidationError({
         severity
     };
 
-    if (line !== undefined) {
+    if (Number.isFinite(line)) {
         error.line = line;
     }
 
-    if (column !== undefined) {
+    if (Number.isFinite(column)) {
         error.column = column;
     }
 
