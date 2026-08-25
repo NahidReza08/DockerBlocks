@@ -258,25 +258,26 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
 }
 
 export function generateGeneratorTs(irRules) {
-    const stackTypes = computeStackTypes(irRules);
-    const valueRules = computeValueRules(irRules, stackTypes);
-    const functions = irRules.map(rule => ruleToGeneratorFunction(rule, stackTypes, valueRules)).join("\n\n");
+  const stackTypes = computeStackTypes(irRules);
+  const valueRules = computeValueRules(irRules, stackTypes);
+  const functions = irRules
+    .map(rule => ruleToGeneratorFunction(rule, stackTypes, valueRules))
+    .join("\n\n");
 
-    return `import * as Blockly from 'blockly';
+  const usesOrder = functions.includes("Order.");
+  const generatorImport = usesOrder
+    ? "import { javascriptGenerator, Order } from 'blockly/javascript';"
+    : "import { javascriptGenerator } from 'blockly/javascript';";
 
-import { javascriptGenerator, Order } from 'blockly/javascript';
+  return `import * as Blockly from 'blockly';
+
+${generatorImport}
+
 export const generator = javascriptGenerator;
-
 generator.INDENT = '  ';
 
-function dedentOnce(code: string): string {
-  return code
-    .split('\\n')
-    .map(line => line.startsWith(generator.INDENT) ? line.slice(generator.INDENT.length) : line)
-    .join('\\n');
-}
-
 ${functions}
+
 `;
 }
 
@@ -307,7 +308,10 @@ export function generateMainTs(irRules) {
             kind: "category",
             name: cat.name,
             colour: cat.colour,
-            contents: cat.blocks.map(type => ({ kind: "block", type }))
+            contents: cat.blocks.map(type => ({
+                kind: "block",
+                type
+            }))
         }))
     };
 
@@ -328,6 +332,7 @@ type UiValidationError = {
 let capturedValidationErrors = [...validationErrors] as UiValidationError[];
 
 defineBlocks();
+
 const workspace = Blockly.inject('blocklyDiv', {
   toolbox: ${JSON.stringify(toolboxJson, null, 2)}
 });
@@ -364,40 +369,89 @@ function updateBlockValidationWarnings() {
   });
 }
 
-function formatValidationError(error: UiValidationError): string {
-  let location = '';
+function createValidationErrorElement(
+  error: UiValidationError
+): HTMLElement {
+  const item = document.createElement('div');
+  item.className = 'validation-error';
+
+  const title = document.createElement('div');
+  title.className = 'validation-error-title';
+  title.textContent = '[' + error.type + ']';
+  item.appendChild(title);
+
+  const message = document.createElement('div');
+  message.className = 'validation-error-message';
+  message.textContent = error.message;
+  item.appendChild(message);
+
+  const details: string[] = [];
 
   if (error.line !== undefined) {
-    location = ' at line ' + error.line;
+    let location = 'Line ' + error.line;
 
     if (error.column !== undefined) {
       location += ', column ' + error.column;
     }
+
+    details.push(location);
   }
 
-  return '[' + error.type + '] ' + error.message + location;
+  if (error.blockId !== undefined) {
+    details.push('Block: ' + error.blockId);
+  }
+
+  if (details.length > 0) {
+    const location = document.createElement('div');
+    location.className = 'validation-error-location';
+    location.textContent = details.join(' · ');
+    item.appendChild(location);
+  }
+
+  return item;
+}
+
+function showNoValidationErrors() {
+  if (!errorOutput) return;
+
+  errorOutput.replaceChildren();
+
+  const status = document.createElement('div');
+  status.className = 'validation-status';
+  status.textContent = 'No errors detected.';
+
+  errorOutput.appendChild(status);
 }
 
 function showCapturedValidationErrors() {
   if (!errorOutput) return;
 
+  errorOutput.replaceChildren();
+
   if (capturedValidationErrors.length === 0) {
-    errorOutput.textContent = 'No errors detected.';
+    showNoValidationErrors();
     return;
   }
 
-  errorOutput.textContent =
-    capturedValidationErrors.map(formatValidationError).join('\\n');
+  capturedValidationErrors.forEach((error) => {
+    errorOutput.appendChild(
+      createValidationErrorElement(error)
+    );
+  });
 }
 
-function refreshValidationState(nextErrors: UiValidationError[]) {
+function refreshValidationState(
+  nextErrors: UiValidationError[]
+) {
   capturedValidationErrors = [...nextErrors];
 
   showCapturedValidationErrors();
   updateBlockValidationWarnings();
 }
 
-function removeValidationErrorsForBlock(blockId: string) {
+function removeValidationErrorsForBlock(
+  blockId: string
+) {
   const nextErrors = capturedValidationErrors.filter(
     (error) => error.blockId !== blockId
   );
@@ -408,10 +462,13 @@ function removeValidationErrorsForBlock(blockId: string) {
 function generateCode() {
   try {
     const code = generator.workspaceToCode(workspace);
-    if (codeOutput) codeOutput.textContent = code;
 
-    if (errorOutput && capturedValidationErrors.length === 0) {
-      errorOutput.textContent = 'No errors detected.';
+    if (codeOutput) {
+      codeOutput.textContent = code;
+    }
+
+    if (capturedValidationErrors.length === 0) {
+      showNoValidationErrors();
     }
   } catch (e) {
     if (errorOutput) {
@@ -421,7 +478,9 @@ function generateCode() {
   }
 }
 
-function handleWorkspaceChange(event: Blockly.Events.Abstract) {
+function handleWorkspaceChange(
+  event: Blockly.Events.Abstract
+) {
   generateCode();
 
   if (
@@ -435,7 +494,8 @@ function handleWorkspaceChange(event: Blockly.Events.Abstract) {
 
     const nextErrors = capturedValidationErrors.filter(
       (error) =>
-        !error.blockId || !deletedBlockIds.includes(error.blockId)
+        !error.blockId ||
+        !deletedBlockIds.includes(error.blockId)
     );
 
     refreshValidationState(nextErrors);
