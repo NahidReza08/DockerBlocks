@@ -166,12 +166,10 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
         block.output = ruleLower;
     } else {
         const stackType = stackTypes.get(ruleLower);
+
         if (stackType) {
             block.previousStatement = stackType;
             block.nextStatement = stackType;
-        } else {
-            block.previousStatement = null;
-            block.nextStatement = null;
         }
     }
 
@@ -277,7 +275,6 @@ export const generator = javascriptGenerator;
 generator.INDENT = '  ';
 
 ${functions}
-
 `;
 }
 
