@@ -14,26 +14,38 @@ type UiValidationError = {
 
 let capturedValidationErrors = [...validationErrors] as UiValidationError[];
 
-// Define custom blocks before setting up the workspace
 defineBlocks();
 
-// Set up the Blockly workspace
 const workspace = Blockly.inject('blocklyDiv', {
   toolbox: {
-    kind: 'flyoutToolbox',
-    contents: [
-      { kind: 'block', type: 'project' },
-      { kind: 'block', type: 'metadata' },
-      { kind: 'block', type: 'member' },
-      { kind: 'block', type: 'module' },
-      { kind: 'block', type: 'component' },
-      { kind: 'block', type: 'task' },
-      { kind: 'block', type: 'subtask' }
-    ]
-  }
+  "kind": "categoryToolbox",
+  "contents": [
+    {
+      "kind": "category",
+      "name": "Main / Entry",
+      "colour": "210",
+      "contents": [
+        {
+          "kind": "block",
+          "type": "compose"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "Elements & Components",
+      "colour": "160",
+      "contents": [
+        {
+          "kind": "block",
+          "type": "service"
+        }
+      ]
+    }
+  ]
+}
 });
 
-// Output elements
 const codeOutput = document.getElementById('codeOutput');
 const errorOutput = document.getElementById('errorOutput');
 
@@ -74,7 +86,7 @@ function createValidationErrorElement(
 
   const title = document.createElement('div');
   title.className = 'validation-error-title';
-  title.textContent = `[${error.type}]`;
+  title.textContent = '[' + error.type + ']';
   item.appendChild(title);
 
   const message = document.createElement('div');
@@ -85,17 +97,17 @@ function createValidationErrorElement(
   const details: string[] = [];
 
   if (error.line !== undefined) {
-    let location = `Line ${error.line}`;
+    let location = 'Line ' + error.line;
 
     if (error.column !== undefined) {
-      location += `, column ${error.column}`;
+      location += ', column ' + error.column;
     }
 
     details.push(location);
   }
 
   if (error.blockId !== undefined) {
-    details.push(`Block: ${error.blockId}`);
+    details.push('Block: ' + error.blockId);
   }
 
   if (details.length > 0) {
@@ -131,18 +143,24 @@ function showCapturedValidationErrors() {
   }
 
   capturedValidationErrors.forEach((error) => {
-    errorOutput.appendChild(createValidationErrorElement(error));
+    errorOutput.appendChild(
+      createValidationErrorElement(error)
+    );
   });
 }
 
-function refreshValidationState(nextErrors: UiValidationError[]) {
+function refreshValidationState(
+  nextErrors: UiValidationError[]
+) {
   capturedValidationErrors = [...nextErrors];
 
   showCapturedValidationErrors();
   updateBlockValidationWarnings();
 }
 
-function removeValidationErrorsForBlock(blockId: string) {
+function removeValidationErrorsForBlock(
+  blockId: string
+) {
   const nextErrors = capturedValidationErrors.filter(
     (error) => error.blockId !== blockId
   );
@@ -169,7 +187,9 @@ function generateCode() {
   }
 }
 
-function handleWorkspaceChange(event: Blockly.Events.Abstract) {
+function handleWorkspaceChange(
+  event: Blockly.Events.Abstract
+) {
   generateCode();
 
   if (
@@ -183,7 +203,8 @@ function handleWorkspaceChange(event: Blockly.Events.Abstract) {
 
     const nextErrors = capturedValidationErrors.filter(
       (error) =>
-        !error.blockId || !deletedBlockIds.includes(error.blockId)
+        !error.blockId ||
+        !deletedBlockIds.includes(error.blockId)
     );
 
     refreshValidationState(nextErrors);
@@ -204,5 +225,4 @@ function handleWorkspaceChange(event: Blockly.Events.Abstract) {
 
 refreshValidationState(capturedValidationErrors);
 
-// Generate code and refresh validation warnings whenever the workspace changes
 workspace.addChangeListener(handleWorkspaceChange);
