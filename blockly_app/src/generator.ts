@@ -12,7 +12,7 @@ generator.forBlock['compose'] = function (block: Blockly.Block): string {
 };
 
 generator.forBlock['service'] = function (block: Blockly.Block): string {
-  const name = block.getFieldValue('NAME') || 'Unnamed';
+  const name = block.getFieldValue('NAME') ?? '';
   const image = block.getFieldValue('IMAGE') || 'Unnamed';
   const code = ("service" + ' ' + name + ' ' + "{" + ' ' + "image" + ' ' + image + ' ' + "}").trim();
   return code + '\n';
