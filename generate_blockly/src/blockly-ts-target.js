@@ -115,6 +115,41 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
     const block = { type: rule.name.toLowerCase() };
     const ruleLower = rule.name.toLowerCase();
 
+    // Docker Compose services use a compact, user-friendly visual layout.
+    // The DSL generator still follows the grammar and emits:
+    // service <name> { image <image> }
+    if (ruleLower === "service") {
+        block.message0 = "Service";
+
+        block.message1 = "Name: %1";
+        block.args1 = [
+            {
+                type: "field_input",
+                name: "NAME",
+                text: "frontend"
+            }
+        ];
+
+        block.message2 = "Image: %1";
+        block.args2 = [
+            {
+                type: "field_input",
+                name: "IMAGE",
+                text: "nginx"
+            }
+        ];
+
+        block.colour = colourForRule(rule.name);
+
+        const stackType = stackTypes.get(ruleLower);
+        if (stackType) {
+            block.previousStatement = stackType;
+            block.nextStatement = stackType;
+        }
+
+        return block;
+    }
+
     let messageIndex = 0;
     let currentMsg = [];
     let currentArgs = [];

@@ -20,24 +20,23 @@ export function defineBlocks() {
       },
       {
         "type": "service",
-        "message0": "service Name: %1",
-        "args0": [
+        "message0": "Service",
+        "message1": "Name: %1",
+        "args1": [
           {
             "type": "field_input",
             "name": "NAME",
-            "text": "Unnamed"
+            "text": "frontend"
           }
         ],
-        "message1": "{",
-        "message2": "image Image: %1",
+        "message2": "Image: %1",
         "args2": [
           {
             "type": "field_input",
             "name": "IMAGE",
-            "text": "Unnamed"
+            "text": "nginx"
           }
         ],
-        "message3": "}",
         "colour": 269,
         "previousStatement": "service",
         "nextStatement": "service"
