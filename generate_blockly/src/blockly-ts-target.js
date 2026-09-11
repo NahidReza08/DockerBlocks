@@ -244,7 +244,11 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
         const isConvertedValueField = part.kind === "value" && part.refRuleName && !valueRules.has(part.refRuleName.toLowerCase());
 
         if (part.kind === "field" || part.kind === "dropdown" || isConvertedValueField) {
-            setupLines.push(`  const ${varName} = block.getFieldValue('${argName}') || 'Unnamed';`);
+            if (blockType === "service" && part.feature === "name") {
+                setupLines.push(`  const ${varName} = block.getFieldValue('${argName}') ?? '';`);
+            } else {
+                setupLines.push(`  const ${varName} = block.getFieldValue('${argName}') || 'Unnamed';`);
+            }
             items.push({ frag: varName, multiline: false });
         } else if (part.kind === "value") {
             setupLines.push(`  const ${varName} = generator.valueToCode(block, '${argName}', Order.NONE) || '';`);
