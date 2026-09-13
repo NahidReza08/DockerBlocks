@@ -1,0 +1,93 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '..', '..');
+
+const mainTsFile = path.join(
+  repoRoot,
+  'blockly_app/src/main.ts'
+);
+
+const templateFile = path.join(
+  repoRoot,
+  'generate_blockly/src/blockly-ts-target.js'
+);
+
+function read(file) {
+  return fs.readFileSync(file, 'utf8');
+}
+
+function assertDockerUsesSharedValidationPipeline(
+  source,
+  context
+) {
+  assert.match(
+    source,
+    /function collectWorkspaceValidationErrors\(\): UiValidationError\[\]/,
+    `${context}: Docker validation should produce UiValidationError objects.`
+  );
+
+  assert.match(
+    source,
+    /blockId:\s*block\.id/,
+    `${context}: Docker validation errors should identify their Blockly block.`
+  );
+
+  assert.match(
+    source,
+    /refreshValidationState\(\[\s*\.\.\.validationErrors,\s*\.\.\.collectWorkspaceValidationErrors\(\)\s*\]\);/,
+    `${context}: grammar and Docker errors should enter the same validation state.`
+  );
+
+  assert.match(
+    source,
+    /function refreshValidationState\([\s\S]*?showCapturedValidationErrors\(\);[\s\S]*?updateBlockValidationWarnings\(\);/,
+    `${context}: shared validation state should update both the error UI and Blockly warnings.`
+  );
+
+  assert.match(
+    source,
+    /capturedValidationErrors\.forEach\(\(error\) => \{[\s\S]*?error\.blockId/,
+    `${context}: Blockly warnings should be driven by captured validation errors.`
+  );
+
+  assert.match(
+    source,
+    /block\.setWarningText\(/,
+    `${context}: existing Blockly warning UI should display validation errors.`
+  );
+}
+
+console.log(
+  '\nS2-10 Docker Validation UI Integration Tests\n'
+);
+
+console.log('Testing generated Blockly application...');
+
+assertDockerUsesSharedValidationPipeline(
+  read(mainTsFile),
+  'Generated main.ts'
+);
+
+console.log(
+  '[PASS] Docker errors use the existing validation UI pipeline'
+);
+
+console.log('Testing generator template...');
+
+assertDockerUsesSharedValidationPipeline(
+  read(templateFile),
+  'Generator template'
+);
+
+console.log(
+  '[PASS] Docker validation UI integration survives regeneration'
+);
+
+console.log(
+  '\n[PASS] All Docker validation UI integration tests passed\n'
+);

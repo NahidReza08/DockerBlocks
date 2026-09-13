@@ -8,7 +8,8 @@
     "test:validation": "node ./tests/validation-regression/run-validation-regression-tests.mjs",
     "test:block-connections": "node ./tests/block-connection-rules/run-block-connection-rules-tests.mjs",
     "test:yaml-generation": "node ./tests/yaml-generation/run-yaml-generation-tests.mjs",
-    "test": "npm run test:validation && npm run test:block-connections && npm run test:yaml-generation"
+    "test": "npm run test:validation && npm run test:block-connections && npm run test:yaml-generation && npm run test:docker-validation-ui",
+    "test:docker-validation-ui": "node ./tests/docker-validation-ui/run-docker-validation-ui-tests.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
