@@ -5,7 +5,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node ./tests/validation-regression/run-validation-regression-tests.mjs"
+    "test:validation": "node ./tests/validation-regression/run-validation-regression-tests.mjs",
+    "test:block-connections": "node ./tests/block-connection-rules/run-block-connection-rules-tests.mjs",
+    "test": "npm run test:validation && npm run test:block-connections"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
