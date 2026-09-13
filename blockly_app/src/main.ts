@@ -22,20 +22,13 @@ const workspace = Blockly.inject('blocklyDiv', {
   "contents": [
     {
       "kind": "category",
-      "name": "Main / Entry",
-      "colour": "210",
+      "name": "Docker",
+      "colour": "230",
       "contents": [
         {
           "kind": "block",
           "type": "compose"
-        }
-      ]
-    },
-    {
-      "kind": "category",
-      "name": "Elements & Components",
-      "colour": "160",
-      "contents": [
+        },
         {
           "kind": "block",
           "type": "service"

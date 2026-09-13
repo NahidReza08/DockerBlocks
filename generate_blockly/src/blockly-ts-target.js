@@ -340,8 +340,20 @@ ${functions}
 
 export function generateMainTs(irRules) {
     const toolboxCategories = [];
-    const entryRules = irRules.filter(r => r.entry);
-    const otherRules = irRules.filter(r => !r.entry);
+
+    const dockerBlockTypes = new Set(["compose", "service"]);
+
+    const dockerRules = irRules.filter(r =>
+        dockerBlockTypes.has(r.name.toLowerCase())
+    );
+
+    const entryRules = irRules.filter(r =>
+        r.entry && !dockerBlockTypes.has(r.name.toLowerCase())
+    );
+
+    const otherRules = irRules.filter(r =>
+        !r.entry && !dockerBlockTypes.has(r.name.toLowerCase())
+    );
 
     if (entryRules.length) {
         toolboxCategories.push({
@@ -356,6 +368,14 @@ export function generateMainTs(irRules) {
             name: "Elements & Components",
             colour: "160",
             blocks: otherRules.map(r => r.name.toLowerCase())
+        });
+    }
+
+    if (dockerRules.length) {
+        toolboxCategories.push({
+            name: "Docker",
+            colour: "230",
+            blocks: dockerRules.map(r => r.name.toLowerCase())
         });
     }
 
