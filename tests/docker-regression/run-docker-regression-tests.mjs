@@ -120,7 +120,7 @@ try {
   );
 
   assert.ok(
-    mainSource.includes("message: 'Docker image is required.'"),
+    mainSource.includes("message: 'Image is required'"),
     'Missing Docker image should produce the existing validation error'
   );
 

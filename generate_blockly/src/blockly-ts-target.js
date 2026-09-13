@@ -445,7 +445,7 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
     if (image.length === 0) {
       errors.push({
         type: 'validation',
-        message: 'Docker image is required.',
+        message: 'Image is required',
         severity: 'error',
         blockId: block.id
       });
