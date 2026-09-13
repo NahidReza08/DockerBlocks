@@ -7,13 +7,11 @@ generator.INDENT = '  ';
 
 generator.forBlock['compose'] = function (block: Blockly.Block): string {
   const services = generator.statementToCode(block, 'SERVICES').replace(/\n$/, '');
-  const code = ("compose" + ' ' + "{" + '\n' + services + '\n' + "}").trim();
-  return code;
+  return 'services:\n' + (services ? services + '\n' : '');
 };
 
 generator.forBlock['service'] = function (block: Blockly.Block): string {
   const name = block.getFieldValue('NAME') ?? '';
-  const image = block.getFieldValue('IMAGE') || 'Unnamed';
-  const code = ("service" + ' ' + name + ' ' + "{" + ' ' + "image" + ' ' + image + ' ' + "}").trim();
-  return code + '\n';
+  const image = block.getFieldValue('IMAGE') ?? '';
+  return name + ':\n  image: ' + image + '\n';
 };
