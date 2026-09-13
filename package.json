@@ -7,12 +7,14 @@
     "preview": "vite preview",
     "test:validation": "node ./tests/validation-regression/run-validation-regression-tests.mjs",
     "test:block-connections": "node ./tests/block-connection-rules/run-block-connection-rules-tests.mjs",
-    "test": "npm run test:validation && npm run test:block-connections"
+    "test:yaml-generation": "node ./tests/yaml-generation/run-yaml-generation-tests.mjs",
+    "test": "npm run test:validation && npm run test:block-connections && npm run test:yaml-generation"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "typescript": "^6.0.3",
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "yaml": "^2.9.1"
   },
   "dependencies": {
     "blockly": "^12.5.1",
