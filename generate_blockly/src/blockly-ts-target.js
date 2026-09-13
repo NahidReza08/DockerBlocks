@@ -425,14 +425,27 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
   workspace.getAllBlocks(false).forEach((block) => {
     if (block.type !== 'service') return;
 
+    const name = String(
+      block.getFieldValue('NAME') ?? ''
+    ).trim();
+
     const image = String(
       block.getFieldValue('IMAGE') ?? ''
     ).trim();
 
+    if (name.length === 0) {
+      errors.push({
+        type: 'validation',
+        message: 'Service name is required.',
+        severity: 'error',
+        blockId: block.id
+      });
+    }
+
     if (image.length === 0) {
       errors.push({
         type: 'validation',
-        message: 'Service image is required.',
+        message: 'Docker image is required.',
         severity: 'error',
         blockId: block.id
       });
