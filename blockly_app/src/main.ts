@@ -51,6 +51,29 @@ const errorOutput = document.getElementById('errorOutput');
 
 const VALIDATION_WARNING_ID = 'captured-validation-error';
 
+function collectWorkspaceValidationErrors(): UiValidationError[] {
+  const errors: UiValidationError[] = [];
+
+  workspace.getAllBlocks(false).forEach((block) => {
+    if (block.type !== 'service') return;
+
+    const image = String(
+      block.getFieldValue('IMAGE') ?? ''
+    ).trim();
+
+    if (image.length === 0) {
+      errors.push({
+        type: 'validation',
+        message: 'Service image is required.',
+        severity: 'error',
+        blockId: block.id
+      });
+    }
+  });
+
+  return errors;
+}
+
 function updateBlockValidationWarnings() {
   workspace.getAllBlocks(false).forEach((block) => {
     block.setWarningText(null, VALIDATION_WARNING_ID);
@@ -158,16 +181,6 @@ function refreshValidationState(
   updateBlockValidationWarnings();
 }
 
-function removeValidationErrorsForBlock(
-  blockId: string
-) {
-  const nextErrors = capturedValidationErrors.filter(
-    (error) => error.blockId !== blockId
-  );
-
-  refreshValidationState(nextErrors);
-}
-
 function generateCode() {
   try {
     const code = generator.workspaceToCode(workspace);
@@ -188,41 +201,19 @@ function generateCode() {
 }
 
 function handleWorkspaceChange(
-  event: Blockly.Events.Abstract
+  _event: Blockly.Events.Abstract
 ) {
   generateCode();
 
-  if (
-    event.type === Blockly.Events.BLOCK_DELETE &&
-    'ids' in event &&
-    Array.isArray(event.ids)
-  ) {
-    const deletedBlockIds = event.ids.filter(
-      (id): id is string => typeof id === 'string'
-    );
-
-    const nextErrors = capturedValidationErrors.filter(
-      (error) =>
-        !error.blockId ||
-        !deletedBlockIds.includes(error.blockId)
-    );
-
-    refreshValidationState(nextErrors);
-    return;
-  }
-
-  if (
-    event.type === Blockly.Events.BLOCK_CHANGE &&
-    'blockId' in event &&
-    typeof event.blockId === 'string'
-  ) {
-    removeValidationErrorsForBlock(event.blockId);
-    return;
-  }
-
-  updateBlockValidationWarnings();
+  refreshValidationState([
+    ...validationErrors,
+    ...collectWorkspaceValidationErrors()
+  ]);
 }
 
-refreshValidationState(capturedValidationErrors);
+refreshValidationState([
+  ...validationErrors,
+  ...collectWorkspaceValidationErrors()
+]);
 
 workspace.addChangeListener(handleWorkspaceChange);

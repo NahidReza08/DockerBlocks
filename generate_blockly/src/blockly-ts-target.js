@@ -244,7 +244,10 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
         const isConvertedValueField = part.kind === "value" && part.refRuleName && !valueRules.has(part.refRuleName.toLowerCase());
 
         if (part.kind === "field" || part.kind === "dropdown" || isConvertedValueField) {
-            if (blockType === "service" && part.feature === "name") {
+            if (
+                blockType === "service" &&
+                (part.feature === "name" || part.feature === "image")
+            ) {
                 setupLines.push(`  const ${varName} = block.getFieldValue('${argName}') ?? '';`);
             } else {
                 setupLines.push(`  const ${varName} = block.getFieldValue('${argName}') || 'Unnamed';`);
@@ -274,6 +277,24 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
     }
 
     const isStackable = stackTypes.has(blockType);
+
+    if (blockType === "compose") {
+        return [
+            `generator.forBlock['compose'] = function (block: Blockly.Block): string {`,
+            ...setupLines,
+            `  return 'services:\\n' + (services ? services + '\\n' : '');`,
+            `};`
+        ].join('\n');
+    }
+
+    if (blockType === "service") {
+        return [
+            `generator.forBlock['service'] = function (block: Blockly.Block): string {`,
+            ...setupLines,
+            `  return name + ':\\n  image: ' + image + '\\n';`,
+            `};`
+        ].join('\n');
+    }
 
     if (isValueBlock) {
         return [
@@ -377,6 +398,29 @@ const codeOutput = document.getElementById('codeOutput');
 const errorOutput = document.getElementById('errorOutput');
 
 const VALIDATION_WARNING_ID = 'captured-validation-error';
+
+function collectWorkspaceValidationErrors(): UiValidationError[] {
+  const errors: UiValidationError[] = [];
+
+  workspace.getAllBlocks(false).forEach((block) => {
+    if (block.type !== 'service') return;
+
+    const image = String(
+      block.getFieldValue('IMAGE') ?? ''
+    ).trim();
+
+    if (image.length === 0) {
+      errors.push({
+        type: 'validation',
+        message: 'Service image is required.',
+        severity: 'error',
+        blockId: block.id
+      });
+    }
+  });
+
+  return errors;
+}
 
 function updateBlockValidationWarnings() {
   workspace.getAllBlocks(false).forEach((block) => {
@@ -485,16 +529,6 @@ function refreshValidationState(
   updateBlockValidationWarnings();
 }
 
-function removeValidationErrorsForBlock(
-  blockId: string
-) {
-  const nextErrors = capturedValidationErrors.filter(
-    (error) => error.blockId !== blockId
-  );
-
-  refreshValidationState(nextErrors);
-}
-
 function generateCode() {
   try {
     const code = generator.workspaceToCode(workspace);
@@ -515,42 +549,20 @@ function generateCode() {
 }
 
 function handleWorkspaceChange(
-  event: Blockly.Events.Abstract
+  _event: Blockly.Events.Abstract
 ) {
   generateCode();
 
-  if (
-    event.type === Blockly.Events.BLOCK_DELETE &&
-    'ids' in event &&
-    Array.isArray(event.ids)
-  ) {
-    const deletedBlockIds = event.ids.filter(
-      (id): id is string => typeof id === 'string'
-    );
-
-    const nextErrors = capturedValidationErrors.filter(
-      (error) =>
-        !error.blockId ||
-        !deletedBlockIds.includes(error.blockId)
-    );
-
-    refreshValidationState(nextErrors);
-    return;
-  }
-
-  if (
-    event.type === Blockly.Events.BLOCK_CHANGE &&
-    'blockId' in event &&
-    typeof event.blockId === 'string'
-  ) {
-    removeValidationErrorsForBlock(event.blockId);
-    return;
-  }
-
-  updateBlockValidationWarnings();
+  refreshValidationState([
+    ...validationErrors,
+    ...collectWorkspaceValidationErrors()
+  ]);
 }
 
-refreshValidationState(capturedValidationErrors);
+refreshValidationState([
+  ...validationErrors,
+  ...collectWorkspaceValidationErrors()
+]);
 
 workspace.addChangeListener(handleWorkspaceChange);
 `;

@@ -2,7 +2,7 @@ grammar DockerCompose
 
 hidden terminal WS: /\s+/;
 
-terminal ID: /[_a-zA-Z][\w_]*/;
+terminal ID: /[_a-zA-Z][\w_]*(?::[\w][\w.-]*)?/;
 
 entry Compose:
     'compose' '{'
