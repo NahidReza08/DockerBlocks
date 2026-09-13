@@ -181,6 +181,77 @@ async function testComposeYamlGeneration() {
     console.log('✓ frontend service generated');
     console.log('✓ nginx image generated');
     console.log('✓ YAML formatting is deterministic');
+
+    console.log('Testing multiple Docker Compose services...');
+
+    const backend = workspace.newBlock('service');
+
+    backend.setFieldValue('backend', 'NAME');
+    backend.setFieldValue('node', 'IMAGE');
+
+    assert.ok(
+      service.nextConnection,
+      'First Service should have a next connection.'
+    );
+
+    assert.ok(
+      backend.previousConnection,
+      'Second Service should have a previous connection.'
+    );
+
+    service.nextConnection.connect(
+      backend.previousConnection
+    );
+
+    const multipleServicesYaml =
+      generator.workspaceToCode(workspace);
+
+    const parsedMultipleServicesYaml =
+      parse(multipleServicesYaml);
+
+    assert.deepEqual(
+      parsedMultipleServicesYaml,
+      {
+        services: {
+          frontend: {
+            image: 'nginx'
+          },
+          backend: {
+            image: 'node'
+          }
+        }
+      },
+      'Generated YAML should contain both Docker Compose services.'
+    );
+
+    const expectedMultipleServices =
+      'services:\n' +
+      '  frontend:\n' +
+      '    image: nginx\n' +
+      '  backend:\n' +
+      '    image: node\n';
+
+    assert.equal(
+      multipleServicesYaml,
+      expectedMultipleServices,
+      'Multiple Docker Compose services should have stable formatting.'
+    );
+
+    assert.match(
+      multipleServicesYaml,
+      /^  backend:/m,
+      'Generated YAML should contain the backend service.'
+    );
+
+    assert.match(
+      multipleServicesYaml,
+      /^    image: node$/m,
+      'Generated YAML should contain the node image.'
+    );
+
+    console.log('✓ multiple services generated');
+    console.log('✓ backend service generated');
+    console.log('✓ node image generated');
   } finally {
     workspace.dispose();
   }
