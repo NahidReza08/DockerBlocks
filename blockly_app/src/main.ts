@@ -36,6 +36,10 @@ const workspace = Blockly.inject('blocklyDiv', {
         {
           "kind": "block",
           "type": "port"
+        },
+        {
+          "kind": "block",
+          "type": "environment"
         }
       ]
     }

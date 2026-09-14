@@ -148,6 +148,15 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
+        block.message4 = "Environment: %1";
+        block.args4 = [
+            {
+                type: "input_statement",
+                name: "ENVIRONMENT",
+                check: "environment"
+            }
+        ];
+
         block.colour = colourForRule(rule.name);
 
         const stackType = stackTypes.get(ruleLower);
@@ -318,6 +327,15 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
         ].join('\n');
     }
 
+    if (blockType === "environment") {
+        return [
+            `generator.forBlock['environment'] = function (block: Blockly.Block): string {`,
+            `  void block;`,
+            `  return '';`,
+            `};`
+        ].join('\n');
+    }
+
     if (isValueBlock) {
         return [
             `generator.forBlock['${blockType}'] = function (block: Blockly.Block) {`,
@@ -363,7 +381,7 @@ ${functions}
 export function generateMainTs(irRules) {
     const toolboxCategories = [];
 
-    const dockerBlockTypes = new Set(["compose", "service", "port"]);
+    const dockerBlockTypes = new Set(["compose", "service", "port", "environment"]);
 
     const dockerRules = irRules.filter(r =>
         dockerBlockTypes.has(r.name.toLowerCase())

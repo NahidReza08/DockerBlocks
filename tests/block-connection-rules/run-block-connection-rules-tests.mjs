@@ -70,6 +70,10 @@ async function testDockerConnectionRules() {
     (block) => block.type === 'port'
   );
 
+  const environment = blocks.find(
+    (block) => block.type === 'environment'
+  );
+
   assert.ok(
     compose,
     'Compose block should be generated.'
@@ -83,6 +87,11 @@ async function testDockerConnectionRules() {
   assert.ok(
     port,
     'Port block should be generated.'
+  );
+
+  assert.ok(
+    environment,
+    'Environment block should be generated.'
   );
 
   assert.equal(
@@ -116,6 +125,57 @@ async function testDockerConnectionRules() {
     servicePortsInput.check,
     'port',
     'Service PORTS input should only accept Port blocks.'
+  );
+
+  const serviceEnvironmentInput = service.args4?.find(
+    (input) => input.name === 'ENVIRONMENT'
+  );
+
+  assert.ok(
+    serviceEnvironmentInput,
+    'Service should expose an ENVIRONMENT statement input for stackable Environment blocks.'
+  );
+
+  assert.equal(
+    serviceEnvironmentInput.type,
+    'input_statement',
+    'Service ENVIRONMENT input should be a Blockly statement input.'
+  );
+
+  assert.equal(
+    serviceEnvironmentInput.check,
+    'environment',
+    'Service ENVIRONMENT input should only accept Environment blocks.'
+  );
+
+  assert.equal(
+    environment.previousStatement,
+    'environment',
+    'Environment should stack above another Environment-compatible block.'
+  );
+
+  assert.equal(
+    environment.nextStatement,
+    'environment',
+    'Environment should stack below another Environment-compatible block.'
+  );
+
+  assert.equal(
+    port.previousStatement,
+    'port',
+    'Port should not attach to an Environment stack.'
+  );
+
+  assert.equal(
+    port.nextStatement,
+    'port',
+    'Port should not accept Environment stack connections.'
+  );
+
+  assert.equal(
+    compose.previousStatement,
+    undefined,
+    'Compose must not accept Environment blocks directly.'
   );
 
   const composeInputs = Object.entries(compose)
