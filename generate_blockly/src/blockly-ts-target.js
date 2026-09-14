@@ -749,7 +749,7 @@ function generateCode() {
 }
 
 function handleWorkspaceChange(
-  _event: Blockly.Events.Abstract
+  _event?: Blockly.Events.Abstract
 ) {
   generateCode();
 
@@ -765,5 +765,86 @@ refreshValidationState([
 ]);
 
 workspace.addChangeListener(handleWorkspaceChange);
+
+const actionStatus = document.getElementById('actionStatus');
+
+function showActionStatus(message: string) {
+  if (actionStatus) actionStatus.textContent = message;
+}
+
+function clearWorkspace() {
+  workspace.clear();
+  handleWorkspaceChange();
+  showActionStatus('');
+}
+
+function loadExample() {
+  // D04, expressed with existing Blockly blocks; no browser DSL parser needed.
+  function service(name: string, image: string, hostPort: number,
+    containerPort: number, source: string, target: string,
+    apiPort = false): Blockly.serialization.blocks.State {
+    const environment: Blockly.serialization.blocks.State = {
+      type: 'environment', fields: { KEY: 'NODE_ENV', VALUE: 'production' }
+    };
+    if (apiPort) {
+      environment.next = {
+        block: { type: 'environment', fields: { KEY: 'API_PORT', VALUE: '3000' } }
+      };
+    }
+    return {
+      type: 'service', fields: { NAME: name, IMAGE: image },
+      inputs: {
+        PORTS: { block: {
+          type: 'port', fields: { HOST_PORT: hostPort, CONTAINER_PORT: containerPort }
+        } },
+        ENVIRONMENT: { block: environment },
+        VOLUMES: { block: { type: 'volume', fields: { SOURCE: source, TARGET: target } } }
+      }
+    };
+  }
+
+  const frontend = service('frontend', 'nginx', 8080, 80,
+    './frontend', '/usr/share/nginx/html');
+  frontend.next = { block: service('backend', 'node:20', 3000, 3000,
+    './data', '/app/data', true) };
+  // Loading a serialized workspace replaces all existing blocks and renders them.
+  Blockly.serialization.workspaces.load({ blocks: { languageVersion: 0, blocks: [{
+    type: 'compose', x: 24, y: 24, inputs: { SERVICES: { block: frontend } }
+  }] } }, workspace);
+  workspace.scroll(0, 0);
+  handleWorkspaceChange();
+  showActionStatus('Example loaded.');
+}
+
+async function copyYaml() {
+  try {
+    await navigator.clipboard.writeText(generator.workspaceToCode(workspace));
+    showActionStatus('YAML copied.');
+  } catch {
+    showActionStatus('Could not copy YAML. Select the generated code and copy it manually.');
+  }
+}
+
+function downloadYaml() {
+  const blob = new Blob([generator.workspaceToCode(workspace)], { type: 'text/yaml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'docker-compose.yml';
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    // Allow the browser to start the download before releasing the URL.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+document.getElementById('loadExample')?.addEventListener('click', loadExample);
+document.getElementById('clearWorkspace')?.addEventListener('click', clearWorkspace);
+document.getElementById('copyYaml')?.addEventListener('click', copyYaml);
+document.getElementById('downloadYaml')?.addEventListener('click', downloadYaml);
+generateCode();
 `;
 }
