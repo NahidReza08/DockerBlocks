@@ -29,3 +29,8 @@ generator.forBlock['port'] = function (block: Blockly.Block): string {
   const containerPort = block.getFieldValue('CONTAINER_PORT') || '0';
   return '"' + hostPort + ':' + containerPort + '"\n';
 };
+
+generator.forBlock['environment'] = function (block: Blockly.Block): string {
+  void block;
+  return '';
+};

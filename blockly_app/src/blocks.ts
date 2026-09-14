@@ -45,6 +45,14 @@ export function defineBlocks() {
             "check": "port"
           }
         ],
+        "message4": "Environment: %1",
+        "args4": [
+          {
+            "type": "input_statement",
+            "name": "ENVIRONMENT",
+            "check": "environment"
+          }
+        ],
         "colour": 269,
         "previousStatement": "service",
         "nextStatement": "service"
@@ -67,6 +75,29 @@ export function defineBlocks() {
         "colour": 241,
         "previousStatement": "port",
         "nextStatement": "port"
+      },
+      {
+        "type": "environment",
+        "message0": "environment",
+        "message1": "Key: %1",
+        "args1": [
+          {
+            "type": "field_input",
+            "name": "KEY",
+            "text": "NODE_ENV"
+          }
+        ],
+        "message2": "Value: %1",
+        "args2": [
+          {
+            "type": "field_input",
+            "name": "VALUE",
+            "text": "production"
+          }
+        ],
+        "colour": 285,
+        "previousStatement": "environment",
+        "nextStatement": "environment"
       }
     ]
   );
