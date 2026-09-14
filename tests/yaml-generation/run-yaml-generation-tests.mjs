@@ -9,6 +9,7 @@ import {
 import * as Blockly from 'blockly';
 import ts from 'typescript';
 import { parse } from 'yaml';
+import { createServicesForGrammar } from 'langium/grammar';
 
 import { loadGrammar } from '../../generate_blockly/src/grammar-loader.js';
 import { validateGrammar } from '../../generate_blockly/src/validator.js';
@@ -87,6 +88,64 @@ async function loadGeneratedGenerator(generatorTs) {
   }
 }
 
+async function testMultiServiceExample(grammar, generator) {
+  const examples = path.join(repoRoot, 'tests', 'docker-compose-examples');
+  const source = fs.readFileSync(path.join(examples, 'D04-valid-multi-service.dsl'), 'utf8');
+  const expected = fs.readFileSync(path.join(examples, 'D04-valid-multi-service.yaml'), 'utf8').replace(/\r\n/g, '\n');
+  const services = await createServicesForGrammar({ grammar });
+  const result = services.parser.LangiumParser.parse(source);
+  assert.deepEqual(result.lexerErrors, [], 'D04 should have no lexer errors');
+  assert.deepEqual(result.parserErrors, [], 'D04 should parse with the Docker Compose grammar');
+
+  const workspace = new Blockly.Workspace();
+  try {
+    // Test-only adapter: all field values come from the parsed demo, not a second fixture.
+    function append(connection, type, fields) {
+      const block = workspace.newBlock(type);
+      for (const [field, value] of Object.entries(fields)) {
+        block.setFieldValue(String(value), field);
+      }
+      connection.connect(block.previousConnection);
+      return block;
+    }
+    const compose = workspace.newBlock('compose');
+    let nextService = compose.getInput('SERVICES').connection;
+    for (const service of result.value.services) {
+      const block = append(nextService, 'service', { NAME: service.name, IMAGE: service.image });
+      nextService = block.nextConnection;
+      for (const [input, type, entries, fields] of [
+        ['PORTS', 'port', service.ports, entry => ({ HOST_PORT: entry.host_port, CONTAINER_PORT: entry.container_port })],
+        ['ENVIRONMENT', 'environment', service.environments, entry => ({ KEY: entry.key, VALUE: entry.value })],
+        ['VOLUMES', 'volume', service.volumes, entry => ({ SOURCE: entry.source, TARGET: entry.target })]
+      ]) {
+        let connection = block.getInput(input).connection;
+        for (const entry of entries) {
+          connection = append(connection, type, fields(entry)).nextConnection;
+        }
+      }
+    }
+    const yaml = generator.workspaceToCode(workspace);
+    assert.equal(yaml, expected, 'D04 generated YAML should match the documented output');
+    assert.deepEqual(parse(yaml), {
+      services: {
+        frontend: {
+          image: 'nginx', ports: ['8080:80'],
+          environment: { NODE_ENV: 'production' },
+          volumes: ['./frontend:/usr/share/nginx/html']
+        },
+        backend: {
+          image: 'node:20', ports: ['3000:3000'],
+          environment: { NODE_ENV: 'production', API_PORT: '3000' },
+          volumes: ['./data:/app/data']
+        }
+      }
+    }, 'D04 YAML should parse with both services and every supported Docker feature');
+    console.log('[PASS] D04 demo parses and generates the expected multi-service YAML');
+  } finally {
+    workspace.dispose();
+  }
+}
+
 async function testComposeYamlGeneration() {
   console.log('Testing Docker Compose YAML generation...');
 
@@ -103,6 +162,8 @@ async function testComposeYamlGeneration() {
 
   const { generator } =
     await loadGeneratedGenerator(generatorTs);
+
+  await testMultiServiceExample(grammar, generator);
 
   const workspace = new Blockly.Workspace();
 
