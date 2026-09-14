@@ -148,12 +148,15 @@ function visit(node, ctx) {
  * matching IRPart. This is where most of the "what does this grammar
  * feature mean as a Blockly input" mapping decisions live:
  *
- *   - `feature += X`            -> "statement" (see below)
- *   - `feature = ID`            -> "field" (fieldType: "text")
- *   - `feature = INT`           -> "field" (fieldType: "number")
- *   - `feature = SomeOtherRule` -> "value" (a plug-in input_value socket)
- *   - `feature = (A | B | C)`   -> "dropdown", if A/B/C are all keywords
- *   - anything else             -> generic "value" fallback
+ *   - `feature += X`                       -> "statement" (see below)
+ *   - `feature = ID`                       -> "field" (fieldType: "text")
+ *   - `feature = INT`                      -> "field" (fieldType: "number")
+ *   - `feature = SomeOtherRule`            -> "value" (a plug-in input_value socket)
+ *   - `feature = (A | B | C)`              -> "dropdown", if A/B/C are all keywords
+ *   - `feature = (ID | INT)`               -> "field" (fieldType: "text")
+ *   - `feature = (INT | INT)`              -> "field" (fieldType: "number")
+ *   - assigned scalar alternatives with ID and/or INT only -> one field IR part
+ *   - anything else                        -> generic "value" fallback
  */
 function handleAssignment(node, ctx) {
 
@@ -190,7 +193,7 @@ function handleAssignment(node, ctx) {
         return;
     }
 
-    const terminal = node.terminal;
+    const terminal = unwrapSingleElementGroups(node.terminal);
 
     if (terminal?.$type === "RuleCall") {
 
@@ -227,11 +230,43 @@ function handleAssignment(node, ctx) {
             });
             return;
         }
+
+        const scalarRefNames = terminal.elements.map(e => unwrapSingleElementGroups(e).rule?.ref?.name);
+        const scalarRuleCalls = scalarRefNames.every(refName => refName === 'ID' || refName === 'INT');
+
+        if (scalarRuleCalls) {
+            const hasId = scalarRefNames.includes('ID');
+            const hasInt = scalarRefNames.includes('INT');
+            const fieldType = hasInt && !hasId ? 'number' : 'text';
+
+            ctx.parts.push({
+                kind: "field",
+                feature: node.feature,
+                fieldType,
+                optional,
+                repeatable
+            });
+            return;
+        }
     }
 
     // Anything else (mixed alternatives, groups, cross-references once
     // supported, ...) becomes a generic plug-in value input.
     ctx.parts.push({ kind: "value", feature: node.feature, optional, repeatable });
+}
+
+function unwrapSingleElementGroups(node) {
+    let current = node;
+
+    while (
+        current?.$type === "Group" &&
+        Array.isArray(current.elements) &&
+        current.elements.length === 1
+    ) {
+        current = current.elements[0];
+    }
+
+    return current;
 }
 
 /**
