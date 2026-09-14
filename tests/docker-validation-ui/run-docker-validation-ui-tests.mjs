@@ -75,6 +75,18 @@ function assertDockerUsesSharedValidationPipeline(
 
   assert.match(
     source,
+    /Environment key is required\./,
+    `${context}: Docker validation should surface the Environment key required message.`
+  );
+
+  assert.match(
+    source,
+    /Environment key must start with a letter or underscore and contain only letters, numbers, and underscores\./,
+    `${context}: Docker validation should surface the Environment key identifier message.`
+  );
+
+  assert.match(
+    source,
     /blockId:\s*block\.id/,
     `${context}: Docker validation errors should identify their Blockly block.`
   );
