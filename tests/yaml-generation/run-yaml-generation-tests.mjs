@@ -584,6 +584,60 @@ async function testComposeYamlGeneration() {
 
     console.log('✓ mixed services with environment generated');
 
+    const volumeWorkspace = new Blockly.Workspace();
+    try {
+      const root = volumeWorkspace.newBlock('compose');
+      const backend = volumeWorkspace.newBlock('service');
+      backend.setFieldValue('backend', 'NAME');
+      backend.setFieldValue('node:20', 'IMAGE');
+      root.getInput('SERVICES').connection.connect(backend.previousConnection);
+      const base = 'services:\n  backend:\n    image: node:20\n';
+      const oneVolume = '    volumes:\n      - "./data:/app/data"\n';
+      const check = (label, expected) => {
+        const actual = generator.workspaceToCode(volumeWorkspace);
+        assert.equal(actual, expected, label);
+        assert.deepEqual(parse(actual), parse(expected), label + ' remains parseable');
+        console.log('[PASS] Volume YAML: ' + label + ' (exact and parseable)');
+      };
+      check('no volumes, image-only unchanged', base);
+      const volume = volumeWorkspace.newBlock('volume');
+      volume.setFieldValue('./data', 'SOURCE');
+      volume.setFieldValue('/app/data', 'TARGET');
+      backend.getInput('VOLUMES').connection.connect(volume.previousConnection);
+      check('one volume with double quotes', base + oneVolume);
+      const config = volumeWorkspace.newBlock('volume');
+      config.setFieldValue('./config', 'SOURCE');
+      config.setFieldValue('/app/config', 'TARGET');
+      volume.nextConnection.connect(config.previousConnection);
+      check('multiple volumes in stack order', base + oneVolume + '      - "./config:/app/config"\n');
+      config.dispose();
+      const port = volumeWorkspace.newBlock('port');
+      port.setFieldValue('3000', 'HOST_PORT');
+      port.setFieldValue('3000', 'CONTAINER_PORT');
+      backend.getInput('PORTS').connection.connect(port.previousConnection);
+      const env = volumeWorkspace.newBlock('environment');
+      env.setFieldValue('NODE_ENV', 'KEY');
+      env.setFieldValue('production', 'VALUE');
+      backend.getInput('ENVIRONMENT').connection.connect(env.previousConnection);
+      const extras = '    ports:\n      - "3000:3000"\n    environment:\n      NODE_ENV: production\n';
+      check('ports + environment + volume together', base + extras + oneVolume);
+      volume.dispose();
+      check('no volumes, port/environment unchanged', base + extras);
+      port.dispose();
+      env.dispose();
+      const onlyVolume = volumeWorkspace.newBlock('volume');
+      onlyVolume.setFieldValue('./data', 'SOURCE');
+      onlyVolume.setFieldValue('/app/data', 'TARGET');
+      backend.getInput('VOLUMES').connection.connect(onlyVolume.previousConnection);
+      const frontend = volumeWorkspace.newBlock('service');
+      frontend.setFieldValue('frontend', 'NAME');
+      frontend.setFieldValue('nginx', 'IMAGE');
+      backend.nextConnection.connect(frontend.previousConnection);
+      check('multiple services, only one with Volume', base + oneVolume + '  frontend:\n    image: nginx\n');
+    } finally {
+      volumeWorkspace.dispose();
+    }
+
     oneEnvironmentWorkspace.dispose();
     multiEnvironmentWorkspace.dispose();
     mixedEnvironmentPortsWorkspace.dispose();

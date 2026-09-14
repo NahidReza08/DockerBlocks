@@ -151,6 +151,7 @@ function visit(node, ctx) {
  *   - `feature += X`                       -> "statement" (see below)
  *   - `feature = ID`                       -> "field" (fieldType: "text")
  *   - `feature = INT`                      -> "field" (fieldType: "number")
+ *   - `feature = STRING`                   -> "field" (fieldType: "text")
  *   - `feature = SomeOtherRule`            -> "value" (a plug-in input_value socket)
  *   - `feature = (A | B | C)`              -> "dropdown", if A/B/C are all keywords
  *   - `feature = (ID | INT)`               -> "field" (fieldType: "text")
@@ -207,6 +208,10 @@ function handleAssignment(node, ctx) {
 
             case "INT":
                 ctx.parts.push({ kind: "field", feature: node.feature, fieldType: "number", optional, repeatable });
+                return;
+
+            case "STRING":
+                ctx.parts.push({ kind: "field", feature: node.feature, fieldType: "text", optional, repeatable });
                 return;
 
             default:

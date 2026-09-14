@@ -4,6 +4,7 @@ hidden terminal WS: /\s+/;
 
 terminal ID: /[_a-zA-Z][\w_]*(?::[\w][\w.-]*)?/;
 terminal INT: /[0-9]+/;
+terminal STRING: /"[^\"]*"|'[^']*'/;
 
 entry Compose:
     'compose' '{'
@@ -15,6 +16,7 @@ Service:
         'image' image=ID
         (ports+=Port)*
         (environments+=Environment)*
+        (volumes+=Volume)*
     '}';
 
 Port:
@@ -22,3 +24,6 @@ Port:
 
 Environment:
     'environment' key=ID '=' value=(ID | INT);
+
+Volume:
+    'volume' source=STRING '->' target=STRING;

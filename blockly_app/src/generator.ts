@@ -29,7 +29,15 @@ generator.forBlock['service'] = function (block: Blockly.Block): string {
         .map((line) => '    ' + line.trim())
         .join('\n')
     : '';
-  return name + ':\n  image: ' + image + '\n' + (listedPorts ? '  ports:\n' + listedPorts + '\n' : '') + (listedEnvironments ? '  environment:\n' + listedEnvironments + '\n' : '');
+  const volumes = generator.statementToCode(block, 'VOLUMES').trimEnd();
+  const listedVolumes = volumes
+    ? volumes
+        .split('\n')
+        .filter((line) => line.trim().length > 0)
+        .map((line) => '    - ' + line.trim())
+        .join('\n')
+    : '';
+  return name + ':\n  image: ' + image + '\n' + (listedPorts ? '  ports:\n' + listedPorts + '\n' : '') + (listedEnvironments ? '  environment:\n' + listedEnvironments + '\n' : '') + (listedVolumes ? '  volumes:\n' + listedVolumes + '\n' : '');
 };
 
 generator.forBlock['port'] = function (block: Blockly.Block): string {
@@ -43,4 +51,10 @@ generator.forBlock['environment'] = function (block: Blockly.Block): string {
   const value = block.getFieldValue('VALUE') ?? '';
   const safeValue = /^\d+$/.test(value) ? '"' + value + '"' : value;
   return key + ': ' + safeValue + '\n';
+};
+
+generator.forBlock['volume'] = function (block: Blockly.Block): string {
+  const source = block.getFieldValue('SOURCE') ?? '';
+  const target = block.getFieldValue('TARGET') ?? '';
+  return '"' + source + ':' + target + '"\n';
 };

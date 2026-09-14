@@ -25,6 +25,17 @@ function assertDockerUsesSharedValidationPipeline(
   source,
   context
 ) {
+  const volumeValidation = source.match(/if \(block\.type === 'volume'\) \{([\s\S]*?)\n    \}/)?.[1];
+  assert.ok(volumeValidation, `${context}: validation inspects Volume blocks`);
+  for (const field of ['SOURCE', 'TARGET']) {
+    assert.ok(volumeValidation.includes(`getFieldValue('${field}')`), `${context}: Volume ${field}`);
+  }
+  for (const message of ['Volume source is required.', 'Volume target is required.']) {
+    assert.ok(volumeValidation.includes(message), `${context}: ${message}`);
+  }
+  assert.equal((volumeValidation.match(/blockId:\s*block\.id/g) ?? []).length, 2,
+    `${context}: both Volume errors identify their Volume block`);
+  console.log(`[PASS] ${context}: Volume SOURCE/TARGET errors use blockId: block.id`);
   assert.match(
     source,
     /function collectWorkspaceValidationErrors\(\): UiValidationError\[\]/,
