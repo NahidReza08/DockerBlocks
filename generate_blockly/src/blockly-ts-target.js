@@ -556,6 +556,28 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
         }
       }
     }
+
+    if (block.type === 'environment') {
+      const key = String(
+        block.getFieldValue('KEY') ?? ''
+      ).trim();
+
+      if (key.length === 0) {
+        errors.push({
+          type: 'validation',
+          message: 'Environment key is required.',
+          severity: 'error',
+          blockId: block.id
+        });
+      } else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        errors.push({
+          type: 'validation',
+          message: 'Environment key must start with a letter or underscore and contain only letters, numbers, and underscores.',
+          severity: 'error',
+          blockId: block.id
+        });
+      }
+    }
   });
 
   return errors;

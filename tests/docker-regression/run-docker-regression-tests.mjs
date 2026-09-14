@@ -120,6 +120,11 @@ try {
   );
 
   assert.ok(
+    mainSource.includes("block.type === 'environment'"),
+    'Validation should inspect Docker environment blocks'
+  );
+
+  assert.ok(
     mainSource.includes("block.getFieldValue('IMAGE')"),
     'Validation should inspect the service IMAGE field'
   );
@@ -132,6 +137,21 @@ try {
   assert.ok(
     mainSource.includes("block.getFieldValue('CONTAINER_PORT')"),
     'Validation should inspect the port CONTAINER_PORT field'
+  );
+
+  assert.ok(
+    mainSource.includes("block.getFieldValue('KEY')"),
+    'Validation should inspect the environment KEY field'
+  );
+
+  assert.ok(
+    mainSource.includes("Environment key is required."),
+    'Missing Docker environment key should produce the required error'
+  );
+
+  assert.ok(
+    mainSource.includes("Environment key must start with a letter or underscore and contain only letters, numbers, and underscores."),
+    'Invalid Docker environment key should produce the identifier error'
   );
 
   assert.ok(
