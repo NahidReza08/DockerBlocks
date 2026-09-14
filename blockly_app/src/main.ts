@@ -52,32 +52,94 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
   const errors: UiValidationError[] = [];
 
   workspace.getAllBlocks(false).forEach((block) => {
-    if (block.type !== 'service') return;
+    if (block.type === 'service') {
+      const name = String(
+        block.getFieldValue('NAME') ?? ''
+      ).trim();
 
-    const name = String(
-      block.getFieldValue('NAME') ?? ''
-    ).trim();
+      const image = String(
+        block.getFieldValue('IMAGE') ?? ''
+      ).trim();
 
-    const image = String(
-      block.getFieldValue('IMAGE') ?? ''
-    ).trim();
+      if (name.length === 0) {
+        errors.push({
+          type: 'validation',
+          message: 'Service name is required.',
+          severity: 'error',
+          blockId: block.id
+        });
+      }
 
-    if (name.length === 0) {
-      errors.push({
-        type: 'validation',
-        message: 'Service name is required.',
-        severity: 'error',
-        blockId: block.id
-      });
+      if (image.length === 0) {
+        errors.push({
+          type: 'validation',
+          message: 'Image is required',
+          severity: 'error',
+          blockId: block.id
+        });
+      }
     }
 
-    if (image.length === 0) {
-      errors.push({
-        type: 'validation',
-        message: 'Image is required',
-        severity: 'error',
-        blockId: block.id
-      });
+    if (block.type === 'port') {
+      const hostPort = String(
+        block.getFieldValue('HOST_PORT') ?? ''
+      ).trim();
+
+      const containerPort = String(
+        block.getFieldValue('CONTAINER_PORT') ?? ''
+      ).trim();
+
+      if (hostPort.length === 0) {
+        errors.push({
+          type: 'validation',
+          message: 'Host port is required.',
+          severity: 'error',
+          blockId: block.id
+        });
+      } else if (!/^\d+$/.test(hostPort)) {
+        errors.push({
+          type: 'validation',
+          message: 'Host port must be an integer between 1 and 65535.',
+          severity: 'error',
+          blockId: block.id
+        });
+      } else {
+        const parsedHostPort = Number(hostPort);
+        if (!Number.isInteger(parsedHostPort) || parsedHostPort < 1 || parsedHostPort > 65535) {
+          errors.push({
+            type: 'validation',
+            message: 'Host port must be an integer between 1 and 65535.',
+            severity: 'error',
+            blockId: block.id
+          });
+        }
+      }
+
+      if (containerPort.length === 0) {
+        errors.push({
+          type: 'validation',
+          message: 'Container port is required.',
+          severity: 'error',
+          blockId: block.id
+        });
+      } else if (!/^\d+$/.test(containerPort)) {
+        errors.push({
+          type: 'validation',
+          message: 'Container port must be an integer between 1 and 65535.',
+          severity: 'error',
+          blockId: block.id
+        });
+      } else {
+        const parsedContainerPort = Number(containerPort);
+        if (!Number.isInteger(parsedContainerPort) || parsedContainerPort < 1 || parsedContainerPort > 65535) {
+          errors.push({
+            type: 'validation',
+            message: 'Container port must be an integer between 1 and 65535.',
+            severity: 'error',
+            blockId: block.id
+          });
+        }
+      }
     }
   });
 

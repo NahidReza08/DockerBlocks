@@ -33,6 +33,48 @@ function assertDockerUsesSharedValidationPipeline(
 
   assert.match(
     source,
+    /if \(block\.type === 'port'\)/,
+    `${context}: Docker validation should inspect port blocks.`
+  );
+
+  assert.match(
+    source,
+    /block\.getFieldValue\('HOST_PORT'\)/,
+    `${context}: Docker validation should inspect the port host field.`
+  );
+
+  assert.match(
+    source,
+    /block\.getFieldValue\('CONTAINER_PORT'\)/,
+    `${context}: Docker validation should inspect the port container field.`
+  );
+
+  assert.match(
+    source,
+    /Host port is required\./,
+    `${context}: Docker validation should surface the host-required port message.`
+  );
+
+  assert.match(
+    source,
+    /Container port is required\./,
+    `${context}: Docker validation should surface the container-required port message.`
+  );
+
+  assert.match(
+    source,
+    /Host port must be an integer between 1 and 65535\./,
+    `${context}: Docker validation should surface the host numeric range message.`
+  );
+
+  assert.match(
+    source,
+    /Container port must be an integer between 1 and 65535\./,
+    `${context}: Docker validation should surface the container numeric range message.`
+  );
+
+  assert.match(
+    source,
     /blockId:\s*block\.id/,
     `${context}: Docker validation errors should identify their Blockly block.`
   );
