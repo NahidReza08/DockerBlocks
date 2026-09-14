@@ -32,6 +32,10 @@ const workspace = Blockly.inject('blocklyDiv', {
         {
           "kind": "block",
           "type": "service"
+        },
+        {
+          "kind": "block",
+          "type": "port"
         }
       ]
     }

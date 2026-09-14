@@ -15,3 +15,7 @@ generator.forBlock['service'] = function (block: Blockly.Block): string {
   const image = block.getFieldValue('IMAGE') ?? '';
   return name + ':\n  image: ' + image + '\n';
 };
+
+generator.forBlock['port'] = function (): string {
+  return '';
+};

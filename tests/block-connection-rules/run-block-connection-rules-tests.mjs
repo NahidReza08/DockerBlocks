@@ -66,6 +66,10 @@ async function testDockerConnectionRules() {
     (block) => block.type === 'service'
   );
 
+  const port = blocks.find(
+    (block) => block.type === 'port'
+  );
+
   assert.ok(
     compose,
     'Compose block should be generated.'
@@ -74,6 +78,44 @@ async function testDockerConnectionRules() {
   assert.ok(
     service,
     'Service block should be generated.'
+  );
+
+  assert.ok(
+    port,
+    'Port block should be generated.'
+  );
+
+  assert.equal(
+    port.previousStatement,
+    'port',
+    'Port should stack above another Port-compatible block.'
+  );
+
+  assert.equal(
+    port.nextStatement,
+    'port',
+    'Port should stack below another Port-compatible block.'
+  );
+
+  const servicePortsInput = service.args3?.find(
+    (input) => input.name === 'PORTS'
+  );
+
+  assert.ok(
+    servicePortsInput,
+    'Service should expose a PORTS statement input for stackable Port blocks.'
+  );
+
+  assert.equal(
+    servicePortsInput.type,
+    'input_statement',
+    'Service PORTS input should be a Blockly statement input.'
+  );
+
+  assert.equal(
+    servicePortsInput.check,
+    'port',
+    'Service PORTS input should only accept Port blocks.'
   );
 
   const composeInputs = Object.entries(compose)
