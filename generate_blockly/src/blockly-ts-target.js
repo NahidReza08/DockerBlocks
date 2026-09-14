@@ -312,7 +312,9 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
             `  const image = block.getFieldValue('IMAGE') ?? '';`,
             `  const ports = generator.statementToCode(block, 'PORTS').trimEnd();`,
             `  const listedPorts = ports ? ports.split('\\n').filter((line) => line.trim().length > 0).map((line) => '    - ' + line.trim()).join('\\n') : '';`,
-            `  return name + ':\\n  image: ' + image + '\\n' + (listedPorts ? '  ports:\\n' + listedPorts + '\\n' : '');`,
+            `  const environments = generator.statementToCode(block, 'ENVIRONMENT').trimEnd();`,
+            `  const listedEnvironments = environments ? environments.split('\\n').filter((line) => line.trim().length > 0).map((line) => '    ' + line.trim()).join('\\n') : '';`,
+            `  return name + ':\\n  image: ' + image + '\\n' + (listedPorts ? '  ports:\\n' + listedPorts + '\\n' : '') + (listedEnvironments ? '  environment:\\n' + listedEnvironments + '\\n' : '');`,
             `};`
         ].join('\n');
     }
@@ -330,8 +332,10 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
     if (blockType === "environment") {
         return [
             `generator.forBlock['environment'] = function (block: Blockly.Block): string {`,
-            `  void block;`,
-            `  return '';`,
+            `  const key = block.getFieldValue('KEY') ?? '';`,
+            `  const value = block.getFieldValue('VALUE') ?? '';`,
+            `  const safeValue = /^\\d+$/.test(value) ? '\"' + value + '\"' : value;`,
+            `  return key + ': ' + safeValue + '\\n';`,
             `};`
         ].join('\n');
     }

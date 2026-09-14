@@ -393,6 +393,203 @@ async function testComposeYamlGeneration() {
 
     console.log('✓ mixed services with port mapping generated');
 
+    console.log('Testing one Docker Compose environment entry...');
+
+    const oneEnvironmentWorkspace = new Blockly.Workspace();
+    const oneEnvironmentCompose = oneEnvironmentWorkspace.newBlock('compose');
+    const oneEnvironmentService = oneEnvironmentWorkspace.newBlock('service');
+
+    oneEnvironmentService.setFieldValue('backend', 'NAME');
+    oneEnvironmentService.setFieldValue('node:20', 'IMAGE');
+
+    const oneEnvironmentBlock = oneEnvironmentWorkspace.newBlock('environment');
+    oneEnvironmentBlock.setFieldValue('NODE_ENV', 'KEY');
+    oneEnvironmentBlock.setFieldValue('production', 'VALUE');
+
+    oneEnvironmentCompose.getInput('SERVICES')?.connection.connect(
+      oneEnvironmentService.previousConnection
+    );
+    oneEnvironmentService.getInput('ENVIRONMENT')?.connection.connect(
+      oneEnvironmentBlock.previousConnection
+    );
+
+    const oneEnvironmentYaml = generator.workspaceToCode(oneEnvironmentWorkspace);
+
+    assert.equal(
+      oneEnvironmentYaml,
+      'services:\n' +
+      '  backend:\n' +
+      '    image: node:20\n' +
+      '    environment:\n' +
+      '      NODE_ENV: production\n',
+      'One Docker Compose environment entry should generate a single environment mapping.'
+    );
+
+    console.log('✓ one environment entry generated');
+
+    console.log('Testing multiple Docker Compose environment entries...');
+
+    const multiEnvironmentWorkspace = new Blockly.Workspace();
+    const multiEnvironmentCompose = multiEnvironmentWorkspace.newBlock('compose');
+    const multiEnvironmentService = multiEnvironmentWorkspace.newBlock('service');
+
+    multiEnvironmentService.setFieldValue('backend', 'NAME');
+    multiEnvironmentService.setFieldValue('node:20', 'IMAGE');
+
+    const envNode = multiEnvironmentWorkspace.newBlock('environment');
+    envNode.setFieldValue('NODE_ENV', 'KEY');
+    envNode.setFieldValue('production', 'VALUE');
+
+    const envPort = multiEnvironmentWorkspace.newBlock('environment');
+    envPort.setFieldValue('API_PORT', 'KEY');
+    envPort.setFieldValue('3000', 'VALUE');
+
+    const envDebug = multiEnvironmentWorkspace.newBlock('environment');
+    envDebug.setFieldValue('DEBUG', 'KEY');
+    envDebug.setFieldValue('false', 'VALUE');
+
+    multiEnvironmentCompose.getInput('SERVICES')?.connection.connect(
+      multiEnvironmentService.previousConnection
+    );
+    multiEnvironmentService.getInput('ENVIRONMENT')?.connection.connect(
+      envNode.previousConnection
+    );
+    envNode.nextConnection.connect(envPort.previousConnection);
+    envPort.nextConnection.connect(envDebug.previousConnection);
+
+    const multiEnvironmentYaml = generator.workspaceToCode(multiEnvironmentWorkspace);
+
+    assert.equal(
+      multiEnvironmentYaml,
+      'services:\n' +
+      '  backend:\n' +
+      '    image: node:20\n' +
+      '    environment:\n' +
+      '      NODE_ENV: production\n' +
+      '      API_PORT: "3000"\n' +
+      '      DEBUG: false\n',
+      'Multiple Docker Compose environment entries should preserve stack order and quote numeric-looking values.'
+    );
+
+    console.log('✓ multiple environment entries generated');
+
+    console.log('Testing environment and ports together...');
+
+    const mixedEnvironmentPortsWorkspace = new Blockly.Workspace();
+    const mixedEnvironmentPortsCompose = mixedEnvironmentPortsWorkspace.newBlock('compose');
+    const mixedEnvironmentPortsService = mixedEnvironmentPortsWorkspace.newBlock('service');
+
+    mixedEnvironmentPortsService.setFieldValue('backend', 'NAME');
+    mixedEnvironmentPortsService.setFieldValue('node:20', 'IMAGE');
+
+    const mixedPort = mixedEnvironmentPortsWorkspace.newBlock('port');
+    mixedPort.setFieldValue('3000', 'HOST_PORT');
+    mixedPort.setFieldValue('3000', 'CONTAINER_PORT');
+
+    const mixedEnv = mixedEnvironmentPortsWorkspace.newBlock('environment');
+    mixedEnv.setFieldValue('API_PORT', 'KEY');
+    mixedEnv.setFieldValue('3000', 'VALUE');
+
+    mixedEnvironmentPortsCompose.getInput('SERVICES')?.connection.connect(
+      mixedEnvironmentPortsService.previousConnection
+    );
+    mixedEnvironmentPortsService.getInput('PORTS')?.connection.connect(
+      mixedPort.previousConnection
+    );
+    mixedEnvironmentPortsService.getInput('ENVIRONMENT')?.connection.connect(
+      mixedEnv.previousConnection
+    );
+
+    const mixedEnvironmentPortsYaml = generator.workspaceToCode(mixedEnvironmentPortsWorkspace);
+
+    assert.equal(
+      mixedEnvironmentPortsYaml,
+      'services:\n' +
+      '  backend:\n' +
+      '    image: node:20\n' +
+      '    ports:\n' +
+      '      - "3000:3000"\n' +
+      '    environment:\n' +
+      '      API_PORT: "3000"\n',
+      'A service with both ports and environment entries should produce both YAML sections in place.'
+    );
+
+    console.log('✓ ports and environment merged in one service');
+
+    console.log('Testing services with no environment remain image-only...');
+
+    const noEnvironmentWorkspace = new Blockly.Workspace();
+    const noEnvironmentCompose = noEnvironmentWorkspace.newBlock('compose');
+    const noEnvironmentService = noEnvironmentWorkspace.newBlock('service');
+
+    noEnvironmentService.setFieldValue('backend', 'NAME');
+    noEnvironmentService.setFieldValue('node:20', 'IMAGE');
+
+    noEnvironmentCompose.getInput('SERVICES')?.connection.connect(
+      noEnvironmentService.previousConnection
+    );
+
+    const noEnvironmentYaml = generator.workspaceToCode(noEnvironmentWorkspace);
+
+    assert.equal(
+      noEnvironmentYaml,
+      'services:\n' +
+      '  backend:\n' +
+      '    image: node:20\n',
+      'A service without any environment blocks must keep the image-only YAML format unchanged.'
+    );
+
+    console.log('✓ no-environment service remains image-only');
+
+    console.log('Testing multiple services where one carries environment...');
+
+    const mixedServiceEnvironmentWorkspace = new Blockly.Workspace();
+    const mixedServiceEnvironmentCompose = mixedServiceEnvironmentWorkspace.newBlock('compose');
+    const mixedServiceEnvironmentService = mixedServiceEnvironmentWorkspace.newBlock('service');
+    const mixedServiceEnvironmentBackend = mixedServiceEnvironmentWorkspace.newBlock('service');
+
+    mixedServiceEnvironmentService.setFieldValue('frontend', 'NAME');
+    mixedServiceEnvironmentService.setFieldValue('nginx', 'IMAGE');
+
+    mixedServiceEnvironmentBackend.setFieldValue('backend', 'NAME');
+    mixedServiceEnvironmentBackend.setFieldValue('node:20', 'IMAGE');
+
+    const envBackend = mixedServiceEnvironmentWorkspace.newBlock('environment');
+    envBackend.setFieldValue('NODE_ENV', 'KEY');
+    envBackend.setFieldValue('production', 'VALUE');
+
+    mixedServiceEnvironmentCompose.getInput('SERVICES')?.connection.connect(
+      mixedServiceEnvironmentService.previousConnection
+    );
+    mixedServiceEnvironmentService.nextConnection.connect(
+      mixedServiceEnvironmentBackend.previousConnection
+    );
+    mixedServiceEnvironmentBackend.getInput('ENVIRONMENT')?.connection.connect(
+      envBackend.previousConnection
+    );
+
+    const mixedServiceEnvironmentYaml = generator.workspaceToCode(mixedServiceEnvironmentWorkspace);
+
+    assert.equal(
+      mixedServiceEnvironmentYaml,
+      'services:\n' +
+      '  frontend:\n' +
+      '    image: nginx\n' +
+      '  backend:\n' +
+      '    image: node:20\n' +
+      '    environment:\n' +
+      '      NODE_ENV: production\n',
+      'Multiple services should keep working if one service carries environment entries.'
+    );
+
+    console.log('✓ mixed services with environment generated');
+
+    oneEnvironmentWorkspace.dispose();
+    multiEnvironmentWorkspace.dispose();
+    mixedEnvironmentPortsWorkspace.dispose();
+    noEnvironmentWorkspace.dispose();
+    mixedServiceEnvironmentWorkspace.dispose();
+
     onePortWorkspace.dispose();
     multiPortWorkspace.dispose();
     noPortWorkspace.dispose();
