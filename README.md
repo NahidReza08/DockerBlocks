@@ -2,7 +2,7 @@
 
 Turns a [Langium](https://langium.org/) grammar (`.langium` file) into a working
 [Blockly](https://developers.google.com/blockly) block editor: block definitions,
-a code generator that turns the workspace back into concrete DSL text, and a
+a code generator that emits DSL text (or Docker Compose YAML), and a
 minimal Vite/TypeScript app that wires them into a browser UI with a live
 "code output" panel.
 
@@ -35,6 +35,15 @@ three TypeScript files that plug directly into `blockly_app/`.
 
 ## Quick start
 
+For the checked-in DockerBlocks editor, run `npm.cmd install` and
+`npm.cmd run dev` from the repository root (use `npm` instead of `npm.cmd`
+outside Windows). Open the printed local URL and build a configuration from
+the Docker toolbox. The output panel updates with Compose YAML.
+Start with the [D04 multi-service demo](tests/docker-compose-examples/README.md#multi-service-demo-d04).
+
+The following commands demonstrate generating an editor for a different grammar
+and overwrite the checked-in Docker editor:
+
 ```bash
 npm install
 
@@ -59,6 +68,60 @@ with a new `.langium` file — it overwrites `blockly_app/src/blocks.ts`,
 > `node generate_blockly/src/parse.js generate_blockly/input/robot.langium`
 > — that's the same command shown above, just against a different example
 > grammar file (`robot.langium`, not included in this listing).
+
+---
+
+## Supported Docker Compose subset
+
+DockerBlocks supports a Compose root containing multiple Service blocks and
+emits a YAML `services:` mapping. The text grammar requires at least one service.
+
+| Block | Supported fields and validation |
+|---|---|
+| Service | Required, nonblank name and image; zero or more Port, Environment, and Volume blocks. |
+| Port | Required host and container ports, each an integer in `1..65535`; emitted as a quoted `HOST:CONTAINER` mapping. |
+| Environment | A `KEY=VALUE` entry, entered in separate Blockly fields. Keys must match `[A-Za-z_][A-Za-z0-9_]*`: ASCII letter or underscore first, then letters, digits, or underscores. YAML uses `KEY: VALUE` mapping entries. |
+| Volume | Required, nonblank source and target; quoted `SOURCE:TARGET` short syntax only. |
+
+Blockly connection rules restrict Compose's service stack to Service blocks,
+and each Service's ports, environment, and volumes stacks to matching block types.
+Validation messages appear in the error panel and as warnings on the affected
+blocks; warnings do not prevent YAML generation.
+
+Empty environment values are allowed by Blockly validation and currently emit
+`KEY:` with no value, not an explicitly quoted empty string. The text DSL instead
+requires an `ID` or `INT` value. Digit-only values are quoted in YAML; other values
+are emitted as entered, so arbitrary YAML-sensitive strings are not generally escaped.
+
+The [text grammar](generate_blockly/input/docker-compose.langium) orders each
+service's image, ports, environment entries, then volumes. It uses
+`port HOST -> CONTAINER`, `environment KEY = VALUE`, and
+`volume "SOURCE" -> "TARGET"`. Service names and images use its restricted
+`ID` token (including simple tags such as `node:20`), not the full Docker
+image-reference syntax. Blockly name/image validation only checks nonblank fields.
+
+Unsupported features include `depends_on`, `networks`, top-level named volume
+declarations, long volume syntax, `secrets`, `env_file`, `build`, commands, and
+health checks. Volume validation checks only nonblank fields; it does not verify
+paths or implement mount options.
+
+## Run and verify
+
+These commands exist in [package.json](package.json). Run from the repository
+root after installing dependencies (use `npm` instead of `npm.cmd` outside Windows):
+
+```powershell
+npm.cmd run dev                     # Vite development server
+npm.cmd test                        # All five regression/integration suites
+npm.cmd run test:yaml-generation    # YAML generation, including D04
+npm.cmd run test:docker-regression  # Docker regression coverage
+npm.cmd run build                   # TypeScript check and Vite production build
+npm.cmd run preview                 # Preview the production build
+```
+
+The full test command covers grammar validation, block connections, YAML
+generation, Docker regression, and Docker validation UI integration.
+The build writes to `blockly_app/dist`.
 
 ---
 
@@ -268,14 +331,12 @@ at the end of this section). It exports three functions:
   `block.getFieldValue`, `generator.valueToCode`, or
   `generator.statementToCode`) and concatenates them — keywords included —
   back into the rule's original concrete syntax, trimmed of extra
-  whitespace where relevant. This is a **round-tripping** strategy: it
-  reconstructs the DSL's own text, not some other target language. If you
-  want a block to actually *compile to something else* (the way the
-  hand-written `rbac_*` blocks referenced in the code comments apparently
-  do), you edit the generated function by hand afterwards.
+  whitespace where relevant. Docker-specific templates instead emit Compose
+  YAML for Compose, Service, Port, Environment, and Volume blocks. Keep changes
+  to generated files consistent with their templates in `blockly-ts-target.js`.
 - **`generateMainTs(irRules)`** → contents of `main.ts`. Wires up
   `defineBlocks()`, injects the Blockly workspace into `#blocklyDiv` with a
-  flyout toolbox listing one block per rule, and adds a change listener
+  category toolbox listing one block per rule, and adds a change listener
   that calls `generator.workspaceToCode(workspace)` on every edit, writing
   the result into `#codeOutput` (or the caught error into `#errorOutput`).
 
@@ -313,29 +374,13 @@ instead of the `blockly_app/` scaffold in this repo.
   adding a domain-specific "run this DSL" panel by hand later — not wired
   up by anything generated). Loads `./src/main.ts` as a module script.
 - **`src/main.ts`**, **`src/blocks.ts`**, **`src/generator.ts`** — these
-  three files are **overwritten every time you run `parse.js`**. The copies
-  currently checked in correspond to the bundled example grammar
-  (`generate_blockly/input/grammar.langium`, an `AddressBook` grammar with
-  `Contact` → `Phone`/`Address`) — i.e. they're the *output* of already
-  having run:
-  ```bash
-  node generate_blockly/src/parse.js generate_blockly/input/grammar.langium
-  ```
-  If you look at `blocks.ts`/`generator.ts` you can see the pattern described
-  above concretely: `phone` and `address` both got
-  `previousStatement`/`nextStatement: "address_or_phone"` because `Contact`
-  does `(phones+=Phone | addresses+=Address)*`, merging both into one
-  shared statement input (see "merged statement parts" above); `addressbook`
-  and `contact` did not, since `AddressBook`'s `contacts+=Contact` only
-  ever targets `Contact` alone, so its check type reduces to plain
-  `"contact"`.
+  three files are **overwritten every time you run `parse.js`**. The checked-in
+  copies implement the Docker Compose subset documented above, with a Docker
+  toolbox and block-specific validation warnings.
 
-Since `generator.ts` in this snapshot imports `javascriptGenerator` from
-`'blockly/javascript'` and re-exports it as `generator`, `blockly_app`
-depends on Blockly's bundled JavaScript generator purely as a vehicle for
-its `forBlock`/`statementToCode`/`valueToCode` machinery — none of the
-generated code actually emits JavaScript; it reconstructs the original DSL
-syntax (see `generateGeneratorTs` above).
+`generator.ts` imports Blockly's `javascriptGenerator` as a vehicle for its
+`forBlock`/`statementToCode`/`valueToCode` machinery. Docker blocks emit Compose
+YAML; the generic templates reconstruct DSL syntax.
 
 ---
 

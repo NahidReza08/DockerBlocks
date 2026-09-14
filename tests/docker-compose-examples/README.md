@@ -4,6 +4,9 @@ This directory contains reusable Docker Compose examples for testing and demonst
 
 The examples serve as fixture data and demos. D04 is checked by the existing YAML generation tests.
 
+See the [supported subset and limitations](../../README.md#supported-docker-compose-subset)
+and [run instructions](../../README.md#run-and-verify) for the current editor.
+
 ## Examples
 
 | ID | File | Scenario | Expected Result |
@@ -26,11 +29,11 @@ These fixtures can be reused for:
 
 D01 represents valid Docker Compose output.
 
-D02 and D03 represent invalid Docker service configurations that should be rejected by validation.
+D02 and D03 represent invalid Docker service configurations that should produce block-specific validation warnings.
 
 ## Multi-service demo (D04)
 
-Open `D04-valid-multi-service.dsl` for the complete supported Docker subset:
+Open [D04-valid-multi-service.dsl](D04-valid-multi-service.dsl) for an example of all supported Docker block types:
 two named services and images, port mappings, environment entries, and short volume mappings.
 The frontend maps port 8080 to 80 and mounts `./frontend` at `/usr/share/nginx/html`.
 The backend maps port 3000 to 3000 and mounts `./data` at `/app/data`.
@@ -40,13 +43,13 @@ The DSL follows `generate_blockly/input/docker-compose.langium`: image first,
 then ports, environments, and volumes. Volume paths are quoted strings;
 the numeric environment value is unquoted in DSL and emitted as `"3000"` in YAML.
 
-For a Blockly demo, run `npm run dev` and recreate the DSL using one Compose
+For a Blockly demo, run `npm.cmd run dev` from the repository root and recreate the DSL using one Compose
 block with two Service blocks, adding their Port, Environment, and Volume blocks
 in the listed order. Enter volume paths without the DSL quote delimiters in
-Blockly fields. Compare the output panel with `D04-valid-multi-service.yaml`.
+Blockly fields. Compare the output panel with [D04-valid-multi-service.yaml](D04-valid-multi-service.yaml).
 This is a configuration/generation demo: application files and a backend startup
 command are not supplied, so it does not provide a running full-stack application.
 
-Run `npm run test:yaml-generation` (also included in `npm test`) to parse D04
+Run `npm.cmd run test:yaml-generation` from the repository root (also included in `npm.cmd test`) to parse D04
 with the actual grammar, populate a test workspace from that parsed example,
 and verify generated YAML against the companion file and expected service values.

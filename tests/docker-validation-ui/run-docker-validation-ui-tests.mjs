@@ -128,7 +128,7 @@ function assertDockerUsesSharedValidationPipeline(
 }
 
 console.log(
-  '\nS2-10 Docker Validation UI Integration Tests\n'
+  '\nDocker Validation UI Integration Tests\n'
 );
 
 console.log('Testing generated Blockly application...');

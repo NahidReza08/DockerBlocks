@@ -272,7 +272,7 @@ async function testDockerConnectionRules() {
 }
 
 try {
-  console.log('\nS2-06 Block Connection Rule Tests\n');
+  console.log('\nBlock Connection Rule Tests\n');
 
   await testDockerConnectionRules();
 

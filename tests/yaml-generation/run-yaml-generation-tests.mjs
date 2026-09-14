@@ -715,7 +715,7 @@ async function testComposeYamlGeneration() {
 }
 
 try {
-  console.log('\nS2-08 Docker Compose YAML Generation Tests\n');
+  console.log('\nDocker Compose YAML Generation Tests\n');
 
   await testComposeYamlGeneration();
 
