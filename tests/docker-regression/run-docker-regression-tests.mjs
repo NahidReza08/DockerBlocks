@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url';
 
 import * as Blockly from 'blockly';
 import ts from 'typescript';
+import { parse } from 'yaml';
+import { generateMainTs } from '../../generate_blockly/src/blockly-ts-target.js';
 
 const projectRoot = path.resolve('.');
 const tempBlocksPath = path.join(
@@ -200,6 +202,77 @@ try {
   );
 
   invalidWorkspace.dispose();
+
+  // Execute the production collector itself, without bootstrapping the browser UI.
+  for (const [context, source] of [
+    ['runtime', mainSource],
+    ['generated template', generateMainTs([])]
+  ]) {
+    const sourceFile = ts.createSourceFile('main.ts', source, ts.ScriptTarget.Latest, true);
+    const collector = sourceFile.statements.find((statement) =>
+      ts.isFunctionDeclaration(statement) && statement.name?.text === 'collectWorkspaceValidationErrors');
+    assert.ok(collector, `${context}: validation collector exists`);
+    const { outputText } = ts.transpileModule(collector.getText(sourceFile), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022 }
+    });
+    const volumeWorkspace = new Blockly.Workspace();
+    try {
+      const collect = new Function('workspace', outputText + '\nreturn collectWorkspaceValidationErrors;')(volumeWorkspace);
+      const compose = volumeWorkspace.newBlock('compose');
+      const service = volumeWorkspace.newBlock('service');
+      service.setFieldValue('backend', 'NAME');
+      service.setFieldValue('node:20', 'IMAGE');
+      compose.getInput('SERVICES').connection.connect(service.previousConnection);
+      const volume = volumeWorkspace.newBlock('volume');
+      volume.setFieldValue('./data', 'SOURCE');
+      volume.setFieldValue('/app/data', 'TARGET');
+      service.getInput('VOLUMES').connection.connect(volume.previousConnection);
+      assert.deepEqual(collect(), []);
+      const yaml = generator.workspaceToCode(volumeWorkspace);
+      assert.equal(yaml, 'services:\n  backend:\n    image: node:20\n    volumes:\n      - "./data:/app/data"\n');
+      assert.deepEqual(parse(yaml), { services: { backend: { image: 'node:20', volumes: ['./data:/app/data'] } } });
+      console.log(`[PASS] ${context}: valid Volume validation and exact double-quoted YAML`);
+      for (const [field, message, valid] of [
+        ['SOURCE', 'Volume source is required.', './data'],
+        ['TARGET', 'Volume target is required.', '/app/data']
+      ]) {
+        for (const empty of ['', '   ']) {
+          volume.setFieldValue(empty, field);
+          assert.deepEqual(collect(), [{ type: 'validation', message, severity: 'error', blockId: volume.id }]);
+        }
+        volume.setFieldValue(valid, field);
+        assert.deepEqual(collect(), []);
+        console.log(`[PASS] ${context}: empty/blank Volume ${field} error attaches to Volume block and clears after correction`);
+      }
+      const port = volumeWorkspace.newBlock('port');
+      port.setFieldValue('3000', 'HOST_PORT');
+      port.setFieldValue('3000', 'CONTAINER_PORT');
+      service.getInput('PORTS').connection.connect(port.previousConnection);
+      const env = volumeWorkspace.newBlock('environment');
+      env.setFieldValue('NODE_ENV', 'KEY');
+      env.setFieldValue('production', 'VALUE');
+      service.getInput('ENVIRONMENT').connection.connect(env.previousConnection);
+      assert.deepEqual(collect(), []);
+      assert.equal(generator.workspaceToCode(volumeWorkspace),
+        'services:\n  backend:\n    image: node:20\n    ports:\n      - "3000:3000"\n    environment:\n      NODE_ENV: production\n    volumes:\n      - "./data:/app/data"\n');
+      service.setFieldValue('', 'IMAGE');
+      port.setFieldValue('0', 'HOST_PORT');
+      env.setFieldValue('', 'KEY');
+      const errors = collect();
+      assert.equal(errors.length, 3);
+      for (const [block, message] of [
+        [service, 'Image is required'],
+        [port, 'Host port must be an integer between 1 and 65535.'],
+        [env, 'Environment key is required.']
+      ]) {
+        assert.deepEqual(errors.find((error) => error.blockId === block.id),
+          { type: 'validation', message, severity: 'error', blockId: block.id });
+      }
+      console.log(`[PASS] ${context}: Service, Port and Environment YAML/validation unchanged with Volume`);
+    } finally {
+      volumeWorkspace.dispose();
+    }
+  }
 
   console.log(
     '[PASS] Invalid Docker blocks produce expected validation and Blockly feedback'

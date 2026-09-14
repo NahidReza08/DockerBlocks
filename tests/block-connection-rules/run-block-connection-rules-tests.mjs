@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import * as Blockly from 'blockly';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,6 +58,43 @@ async function testDockerConnectionRules() {
   const ir = buildIR(grammar);
   const blocksTs = generateBlocksTs(ir);
   const blocks = extractBlockDefinitions(blocksTs);
+
+  const volume = blocks.find((block) => block.type === 'volume');
+  assert.ok(volume, 'Volume should be generated');
+  assert.equal(volume.previousStatement, 'volume');
+  assert.equal(volume.nextStatement, 'volume');
+  Blockly.defineBlocksWithJsonArray(blocks);
+  const workspace = new Blockly.Workspace();
+  try {
+    const service = workspace.newBlock('service');
+    const first = workspace.newBlock('volume');
+    const second = workspace.newBlock('volume');
+    const port = workspace.newBlock('port');
+    const environment = workspace.newBlock('environment');
+    const compose = workspace.newBlock('compose');
+    const volumes = service.getInput('VOLUMES');
+    assert.ok(volumes, 'Service has VOLUMES');
+    assert.deepEqual(volumes.connection.getCheck(), ['volume']);
+    assert.deepEqual(first.previousConnection.getCheck(), ['volume']);
+    assert.deepEqual(first.nextConnection.getCheck(), ['volume']);
+    volumes.connection.connect(first.previousConnection);
+    first.nextConnection.connect(second.previousConnection);
+    assert.equal(service.getInputTargetBlock('VOLUMES'), first);
+    assert.equal(first.getNextBlock(), second);
+    console.log('[PASS] Service VOLUMES accepts Volume; Volume stacks with volume previous/next types');
+    for (const [label, parent, child] of [
+      ['Volume cannot connect to PORTS', service.getInput('PORTS').connection, first.previousConnection],
+      ['Volume cannot connect to ENVIRONMENT', service.getInput('ENVIRONMENT').connection, first.previousConnection],
+      ['Port cannot connect to VOLUMES', volumes.connection, port.previousConnection],
+      ['Environment cannot connect to VOLUMES', volumes.connection, environment.previousConnection],
+      ['Volume cannot connect to Compose SERVICES', compose.getInput('SERVICES').connection, first.previousConnection]
+    ]) {
+      assert.equal(workspace.connectionChecker.doTypeChecks(parent, child), false, label);
+      console.log('[PASS] ' + label);
+    }
+  } finally {
+    workspace.dispose();
+  }
 
   const compose = blocks.find(
     (block) => block.type === 'compose'

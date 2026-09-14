@@ -40,6 +40,10 @@ const workspace = Blockly.inject('blocklyDiv', {
         {
           "kind": "block",
           "type": "environment"
+        },
+        {
+          "kind": "block",
+          "type": "volume"
         }
       ]
     }
@@ -162,6 +166,34 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
         errors.push({
           type: 'validation',
           message: 'Environment key must start with a letter or underscore and contain only letters, numbers, and underscores.',
+          severity: 'error',
+          blockId: block.id
+        });
+      }
+    }
+
+    if (block.type === 'volume') {
+      const source = String(
+        block.getFieldValue('SOURCE') ?? ''
+      ).trim();
+
+      const target = String(
+        block.getFieldValue('TARGET') ?? ''
+      ).trim();
+
+      if (source.length === 0) {
+        errors.push({
+          type: 'validation',
+          message: 'Volume source is required.',
+          severity: 'error',
+          blockId: block.id
+        });
+      }
+
+      if (target.length === 0) {
+        errors.push({
+          type: 'validation',
+          message: 'Volume target is required.',
           severity: 'error',
           blockId: block.id
         });

@@ -157,6 +157,15 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
+        block.message5 = "Volumes: %1";
+        block.args5 = [
+            {
+                type: "input_statement",
+                name: "VOLUMES",
+                check: "volume"
+            }
+        ];
+
         block.colour = colourForRule(rule.name);
 
         const stackType = stackTypes.get(ruleLower);
@@ -314,7 +323,9 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
             `  const listedPorts = ports ? ports.split('\\n').filter((line) => line.trim().length > 0).map((line) => '    - ' + line.trim()).join('\\n') : '';`,
             `  const environments = generator.statementToCode(block, 'ENVIRONMENT').trimEnd();`,
             `  const listedEnvironments = environments ? environments.split('\\n').filter((line) => line.trim().length > 0).map((line) => '    ' + line.trim()).join('\\n') : '';`,
-            `  return name + ':\\n  image: ' + image + '\\n' + (listedPorts ? '  ports:\\n' + listedPorts + '\\n' : '') + (listedEnvironments ? '  environment:\\n' + listedEnvironments + '\\n' : '');`,
+            `  const volumes = generator.statementToCode(block, 'VOLUMES').trimEnd();`,
+            `  const listedVolumes = volumes ? volumes.split('\\n').filter((line) => line.trim().length > 0).map((line) => '    - ' + line.trim()).join('\\n') : '';`,
+            `  return name + ':\\n  image: ' + image + '\\n' + (listedPorts ? '  ports:\\n' + listedPorts + '\\n' : '') + (listedEnvironments ? '  environment:\\n' + listedEnvironments + '\\n' : '') + (listedVolumes ? '  volumes:\\n' + listedVolumes + '\\n' : '');`,
             `};`
         ].join('\n');
     }
@@ -336,6 +347,16 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
             `  const value = block.getFieldValue('VALUE') ?? '';`,
             `  const safeValue = /^\\d+$/.test(value) ? '\"' + value + '\"' : value;`,
             `  return key + ': ' + safeValue + '\\n';`,
+            `};`
+        ].join('\n');
+    }
+
+    if (blockType === "volume") {
+        return [
+            `generator.forBlock['volume'] = function (block: Blockly.Block): string {`,
+            `  const source = block.getFieldValue('SOURCE') ?? '';`,
+            `  const target = block.getFieldValue('TARGET') ?? '';`,
+            `  return '"' + source + ':' + target + '"\\n';`,
             `};`
         ].join('\n');
     }
@@ -385,7 +406,7 @@ ${functions}
 export function generateMainTs(irRules) {
     const toolboxCategories = [];
 
-    const dockerBlockTypes = new Set(["compose", "service", "port", "environment"]);
+    const dockerBlockTypes = new Set(["compose", "service", "port", "environment", "volume"]);
 
     const dockerRules = irRules.filter(r =>
         dockerBlockTypes.has(r.name.toLowerCase())
@@ -511,7 +532,7 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
           severity: 'error',
           blockId: block.id
         });
-      } else if (!/^\d+$/.test(hostPort)) {
+      } else if (!/^\\d+$/.test(hostPort)) {
         errors.push({
           type: 'validation',
           message: 'Host port must be an integer between 1 and 65535.',
@@ -537,7 +558,7 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
           severity: 'error',
           blockId: block.id
         });
-      } else if (!/^\d+$/.test(containerPort)) {
+      } else if (!/^\\d+$/.test(containerPort)) {
         errors.push({
           type: 'validation',
           message: 'Container port must be an integer between 1 and 65535.',
@@ -573,6 +594,34 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
         errors.push({
           type: 'validation',
           message: 'Environment key must start with a letter or underscore and contain only letters, numbers, and underscores.',
+          severity: 'error',
+          blockId: block.id
+        });
+      }
+    }
+
+    if (block.type === 'volume') {
+      const source = String(
+        block.getFieldValue('SOURCE') ?? ''
+      ).trim();
+
+      const target = String(
+        block.getFieldValue('TARGET') ?? ''
+      ).trim();
+
+      if (source.length === 0) {
+        errors.push({
+          type: 'validation',
+          message: 'Volume source is required.',
+          severity: 'error',
+          blockId: block.id
+        });
+      }
+
+      if (target.length === 0) {
+        errors.push({
+          type: 'validation',
+          message: 'Volume target is required.',
           severity: 'error',
           blockId: block.id
         });

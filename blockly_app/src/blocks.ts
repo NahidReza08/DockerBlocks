@@ -53,6 +53,14 @@ export function defineBlocks() {
             "check": "environment"
           }
         ],
+        "message5": "Volumes: %1",
+        "args5": [
+          {
+            "type": "input_statement",
+            "name": "VOLUMES",
+            "check": "volume"
+          }
+        ],
         "colour": 269,
         "previousStatement": "service",
         "nextStatement": "service"
@@ -98,6 +106,29 @@ export function defineBlocks() {
         "colour": 285,
         "previousStatement": "environment",
         "nextStatement": "environment"
+      },
+      {
+        "type": "volume",
+        "message0": "volume",
+        "message1": "Source: %1",
+        "args1": [
+          {
+            "type": "field_input",
+            "name": "SOURCE",
+            "text": "./data"
+          }
+        ],
+        "message2": "Target: %1",
+        "args2": [
+          {
+            "type": "field_input",
+            "name": "TARGET",
+            "text": "/app/data"
+          }
+        ],
+        "colour": 155,
+        "previousStatement": "volume",
+        "nextStatement": "volume"
       }
     ]
   );
