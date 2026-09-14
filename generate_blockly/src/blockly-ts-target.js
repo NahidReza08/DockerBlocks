@@ -139,6 +139,15 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
+        block.message3 = "Ports: %1";
+        block.args3 = [
+            {
+                type: "input_statement",
+                name: "PORTS",
+                check: "port"
+            }
+        ];
+
         block.colour = colourForRule(rule.name);
 
         const stackType = stackTypes.get(ruleLower);
@@ -341,7 +350,7 @@ ${functions}
 export function generateMainTs(irRules) {
     const toolboxCategories = [];
 
-    const dockerBlockTypes = new Set(["compose", "service"]);
+    const dockerBlockTypes = new Set(["compose", "service", "port"]);
 
     const dockerRules = irRules.filter(r =>
         dockerBlockTypes.has(r.name.toLowerCase())

@@ -37,9 +37,36 @@ export function defineBlocks() {
             "text": "nginx"
           }
         ],
+        "message3": "Ports: %1",
+        "args3": [
+          {
+            "type": "input_statement",
+            "name": "PORTS",
+            "check": "port"
+          }
+        ],
         "colour": 269,
         "previousStatement": "service",
         "nextStatement": "service"
+      },
+      {
+        "type": "port",
+        "message0": "port Host / Port: %1 -> Container / Port: %2",
+        "args0": [
+          {
+            "type": "field_number",
+            "name": "HOST_PORT",
+            "value": 0
+          },
+          {
+            "type": "field_number",
+            "name": "CONTAINER_PORT",
+            "value": 0
+          }
+        ],
+        "colour": 241,
+        "previousStatement": "port",
+        "nextStatement": "port"
       }
     ]
   );
