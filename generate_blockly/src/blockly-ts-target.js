@@ -299,8 +299,21 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
     if (blockType === "service") {
         return [
             `generator.forBlock['service'] = function (block: Blockly.Block): string {`,
-            ...setupLines,
-            `  return name + ':\\n  image: ' + image + '\\n';`,
+            `  const name = block.getFieldValue('NAME') ?? '';`,
+            `  const image = block.getFieldValue('IMAGE') ?? '';`,
+            `  const ports = generator.statementToCode(block, 'PORTS').trimEnd();`,
+            `  const listedPorts = ports ? ports.split('\\n').filter((line) => line.trim().length > 0).map((line) => '    - ' + line.trim()).join('\\n') : '';`,
+            `  return name + ':\\n  image: ' + image + '\\n' + (listedPorts ? '  ports:\\n' + listedPorts + '\\n' : '');`,
+            `};`
+        ].join('\n');
+    }
+
+    if (blockType === "port") {
+        return [
+            `generator.forBlock['port'] = function (block: Blockly.Block): string {`,
+            `  const hostPort = block.getFieldValue('HOST_PORT') || '0';`,
+            `  const containerPort = block.getFieldValue('CONTAINER_PORT') || '0';`,
+            `  return '\"' + hostPort + ':' + containerPort + '\"\\n';`,
             `};`
         ].join('\n');
     }

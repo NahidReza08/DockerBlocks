@@ -252,6 +252,151 @@ async function testComposeYamlGeneration() {
     console.log('✓ multiple services generated');
     console.log('✓ backend service generated');
     console.log('✓ node image generated');
+
+    console.log('Testing one Docker Compose port mapping...');
+
+    const onePortWorkspace = new Blockly.Workspace();
+    const onePortCompose = onePortWorkspace.newBlock('compose');
+    const onePortService = onePortWorkspace.newBlock('service');
+
+    onePortService.setFieldValue('frontend', 'NAME');
+    onePortService.setFieldValue('nginx', 'IMAGE');
+
+    const onePortBlock = onePortWorkspace.newBlock('port');
+    onePortBlock.setFieldValue('8080', 'HOST_PORT');
+    onePortBlock.setFieldValue('80', 'CONTAINER_PORT');
+
+    onePortCompose.getInput('SERVICES')?.connection.connect(
+      onePortService.previousConnection
+    );
+    onePortService.getInput('PORTS')?.connection.connect(
+      onePortBlock.previousConnection
+    );
+
+    const onePortYaml = generator.workspaceToCode(onePortWorkspace);
+
+    assert.equal(
+      onePortYaml,
+      'services:\n' +
+      '  frontend:\n' +
+      '    image: nginx\n' +
+      '    ports:\n' +
+      '      - "8080:80"\n',
+      'One Docker port mapping should generate a single quoted short-syntax port entry.'
+    );
+
+    console.log('✓ one port mapping generated');
+
+    console.log('Testing multiple Docker Compose port mappings...');
+
+    const multiPortWorkspace = new Blockly.Workspace();
+    const multiPortCompose = multiPortWorkspace.newBlock('compose');
+    const multiPortService = multiPortWorkspace.newBlock('service');
+
+    multiPortService.setFieldValue('frontend', 'NAME');
+    multiPortService.setFieldValue('nginx', 'IMAGE');
+
+    const port8080 = multiPortWorkspace.newBlock('port');
+    port8080.setFieldValue('8080', 'HOST_PORT');
+    port8080.setFieldValue('80', 'CONTAINER_PORT');
+
+    const port8443 = multiPortWorkspace.newBlock('port');
+    port8443.setFieldValue('8443', 'HOST_PORT');
+    port8443.setFieldValue('443', 'CONTAINER_PORT');
+
+    multiPortCompose.getInput('SERVICES')?.connection.connect(
+      multiPortService.previousConnection
+    );
+    multiPortService.getInput('PORTS')?.connection.connect(
+      port8080.previousConnection
+    );
+    port8080.nextConnection.connect(port8443.previousConnection);
+
+    const multiPortYaml = generator.workspaceToCode(multiPortWorkspace);
+
+    assert.equal(
+      multiPortYaml,
+      'services:\n' +
+      '  frontend:\n' +
+      '    image: nginx\n' +
+      '    ports:\n' +
+      '      - "8080:80"\n' +
+      '      - "8443:443"\n',
+      'Multiple Docker port mappings should preserve stack order and emit short syntax.'
+    );
+
+    console.log('✓ multiple port mappings generated');
+
+    console.log('Testing services with no ports remain image-only...');
+
+    const noPortWorkspace = new Blockly.Workspace();
+    const noPortCompose = noPortWorkspace.newBlock('compose');
+    const noPortService = noPortWorkspace.newBlock('service');
+
+    noPortService.setFieldValue('frontend', 'NAME');
+    noPortService.setFieldValue('nginx', 'IMAGE');
+
+    noPortCompose.getInput('SERVICES')?.connection.connect(
+      noPortService.previousConnection
+    );
+
+    const noPortYaml = generator.workspaceToCode(noPortWorkspace);
+
+    assert.equal(
+      noPortYaml,
+      'services:\n' +
+      '  frontend:\n' +
+      '    image: nginx\n',
+      'A service without any port blocks must keep the existing image-only YAML format.'
+    );
+
+    console.log('✓ no-port service remains image-only');
+
+    console.log('Testing multiple services with one service carrying ports...');
+
+    const mixedWorkspace = new Blockly.Workspace();
+    const mixedCompose = mixedWorkspace.newBlock('compose');
+    const mixedService = mixedWorkspace.newBlock('service');
+    const mixedBackend = mixedWorkspace.newBlock('service');
+
+    mixedService.setFieldValue('frontend', 'NAME');
+    mixedService.setFieldValue('nginx', 'IMAGE');
+
+    mixedBackend.setFieldValue('backend', 'NAME');
+    mixedBackend.setFieldValue('node', 'IMAGE');
+
+    const servicePort = mixedWorkspace.newBlock('port');
+    servicePort.setFieldValue('8080', 'HOST_PORT');
+    servicePort.setFieldValue('80', 'CONTAINER_PORT');
+
+    mixedCompose.getInput('SERVICES')?.connection.connect(
+      mixedService.previousConnection
+    );
+    mixedService.nextConnection.connect(mixedBackend.previousConnection);
+    mixedService.getInput('PORTS')?.connection.connect(
+      servicePort.previousConnection
+    );
+
+    const mixedYaml = generator.workspaceToCode(mixedWorkspace);
+
+    assert.equal(
+      mixedYaml,
+      'services:\n' +
+      '  frontend:\n' +
+      '    image: nginx\n' +
+      '    ports:\n' +
+      '      - "8080:80"\n' +
+      '  backend:\n' +
+      '    image: node\n',
+      'Multiple services should keep working if one service carries a port mapping.'
+    );
+
+    console.log('✓ mixed services with port mapping generated');
+
+    onePortWorkspace.dispose();
+    multiPortWorkspace.dispose();
+    noPortWorkspace.dispose();
+    mixedWorkspace.dispose();
   } finally {
     workspace.dispose();
   }

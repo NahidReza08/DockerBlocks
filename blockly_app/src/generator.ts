@@ -13,9 +13,19 @@ generator.forBlock['compose'] = function (block: Blockly.Block): string {
 generator.forBlock['service'] = function (block: Blockly.Block): string {
   const name = block.getFieldValue('NAME') ?? '';
   const image = block.getFieldValue('IMAGE') ?? '';
-  return name + ':\n  image: ' + image + '\n';
+  const ports = generator.statementToCode(block, 'PORTS').trimEnd();
+  const listedPorts = ports
+    ? ports
+        .split('\n')
+        .filter((line) => line.trim().length > 0)
+        .map((line) => '    - ' + line.trim())
+        .join('\n')
+    : '';
+  return name + ':\n  image: ' + image + '\n' + (listedPorts ? '  ports:\n' + listedPorts + '\n' : '');
 };
 
-generator.forBlock['port'] = function (): string {
-  return '';
+generator.forBlock['port'] = function (block: Blockly.Block): string {
+  const hostPort = block.getFieldValue('HOST_PORT') || '0';
+  const containerPort = block.getFieldValue('CONTAINER_PORT') || '0';
+  return '"' + hostPort + ':' + containerPort + '"\n';
 };
