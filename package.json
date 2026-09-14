@@ -10,7 +10,7 @@
     "test:yaml-generation": "node ./tests/yaml-generation/run-yaml-generation-tests.mjs",
     "test:docker-regression": "node ./tests/docker-regression/run-docker-regression-tests.mjs",
     "test": "npm run test:validation && npm run test:block-connections && npm run test:yaml-generation && npm run test:docker-regression && npm run test:docker-validation-ui",
-    "test:docker-validation-ui": "node ./tests/docker-validation-ui/run-docker-validation-ui-tests.mjs"
+    "test:docker-validation-ui": "node ./tests/docker-validation-ui/run-docker-validation-ui-tests.mjs && node ./tests/docker-validation-ui/run-final-ui-polish-tests.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

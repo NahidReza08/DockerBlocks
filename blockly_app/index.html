@@ -73,6 +73,36 @@
       }
 
       /* Blockly Workspace Container */
+      .code-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .code-actions button {
+        padding: 7px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: var(--card-bg);
+        color: var(--text-main);
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      .code-actions button:hover { background: #eff6ff; }
+      .code-actions button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+      #actionStatus {
+        padding: 0 16px;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+
+      #actionStatus:not(:empty) { padding: 8px 16px; }
+
       #blocklyDiv {
         flex: 1;
         width: 100%;
@@ -181,6 +211,13 @@
       <div class="sidebar">
         <div class="card output-pane">
           <div class="card-header">Generated Code</div>
+          <div class="code-actions" role="group" aria-label="Workspace and YAML actions">
+            <button id="loadExample" type="button">Load Example</button>
+            <button id="clearWorkspace" type="button">Clear</button>
+            <button id="copyYaml" type="button">Copy YAML</button>
+            <button id="downloadYaml" type="button">Download YAML</button>
+          </div>
+          <div id="actionStatus" role="status" aria-live="polite"></div>
           <pre id="codeOutput">// Code will appear here...</pre>
         </div>
 
