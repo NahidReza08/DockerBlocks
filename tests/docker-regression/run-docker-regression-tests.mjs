@@ -110,8 +110,13 @@ try {
   );
 
   assert.ok(
-    mainSource.includes("block.type !== 'service'"),
+    mainSource.includes("block.type === 'service'"),
     'Validation should inspect Docker service blocks'
+  );
+
+  assert.ok(
+    mainSource.includes("block.type === 'port'"),
+    'Validation should inspect Docker port blocks'
   );
 
   assert.ok(
@@ -120,8 +125,38 @@ try {
   );
 
   assert.ok(
+    mainSource.includes("block.getFieldValue('HOST_PORT')"),
+    'Validation should inspect the port HOST_PORT field'
+  );
+
+  assert.ok(
+    mainSource.includes("block.getFieldValue('CONTAINER_PORT')"),
+    'Validation should inspect the port CONTAINER_PORT field'
+  );
+
+  assert.ok(
     mainSource.includes("message: 'Image is required'"),
     'Missing Docker image should produce the existing validation error'
+  );
+
+  assert.ok(
+    mainSource.includes("message: 'Host port is required.'"),
+    'Missing Docker host port should produce a port validation error'
+  );
+
+  assert.ok(
+    mainSource.includes("message: 'Container port is required.'"),
+    'Missing Docker container port should produce a port validation error'
+  );
+
+  assert.ok(
+    mainSource.includes("message: 'Host port must be an integer between 1 and 65535.'"),
+    'Port host should use the shared integer range validation message'
+  );
+
+  assert.ok(
+    mainSource.includes("message: 'Container port must be an integer between 1 and 65535.'"),
+    'Port container should use the shared integer range validation message'
   );
 
   assert.ok(
