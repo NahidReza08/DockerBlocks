@@ -35,7 +35,7 @@ async function loadTypescriptModule(sourcePath, tempPath) {
   );
 }
 
-console.log('\nS2-12 Docker Regression Tests\n');
+console.log('\nDocker Regression Tests (S2-12 / S3-09)\n');
 
 try {
   const { defineBlocks } = await loadTypescriptModule(
@@ -215,6 +215,115 @@ try {
     const { outputText } = ts.transpileModule(collector.getText(sourceFile), {
       compilerOptions: { target: ts.ScriptTarget.ES2022 }
     });
+    const integrationWorkspace = new Blockly.Workspace();
+    try {
+      const collect = new Function('workspace', outputText + '\nreturn collectWorkspaceValidationErrors;')(integrationWorkspace);
+      const compose = integrationWorkspace.newBlock('compose');
+      function createBlock(type, fields) {
+        const block = integrationWorkspace.newBlock(type);
+        for (const [field, value] of Object.entries(fields)) {
+          block.setFieldValue(value, field);
+        }
+        return block;
+      }
+      function createService(name, image, hostPort, containerPort, source, target) {
+        const service = createBlock('service', { NAME: name, IMAGE: image });
+        // Create children in a different order from the required YAML sections.
+        const volume = createBlock('volume', { SOURCE: source, TARGET: target });
+        const environment = createBlock('environment', { KEY: 'NODE_ENV', VALUE: 'production' });
+        const port = createBlock('port', { HOST_PORT: hostPort, CONTAINER_PORT: containerPort });
+        service.getInput('VOLUMES').connection.connect(volume.previousConnection);
+        service.getInput('ENVIRONMENT').connection.connect(environment.previousConnection);
+        service.getInput('PORTS').connection.connect(port.previousConnection);
+        return { service, volume, environment, port };
+      }
+      // Connection order, rather than block creation order, determines service order.
+      const backend = createService('backend', 'node:20', '3000', '3000', './data', '/app/data');
+      const frontend = createService('frontend', 'nginx', '8080', '80', './frontend', '/usr/share/nginx/html');
+      compose.getInput('SERVICES').connection.connect(frontend.service.previousConnection);
+      frontend.service.nextConnection.connect(backend.service.previousConnection);
+      const apiPort = createBlock('environment', { KEY: 'API_PORT', VALUE: '3000' });
+      backend.environment.nextConnection.connect(apiPort.previousConnection);
+
+      const expectedYaml = `services:
+  frontend:
+    image: nginx
+    ports:
+      - "8080:80"
+    environment:
+      NODE_ENV: production
+    volumes:
+      - "./frontend:/usr/share/nginx/html"
+  backend:
+    image: node:20
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      API_PORT: "3000"
+    volumes:
+      - "./data:/app/data"
+`;
+      assert.deepEqual(collect(), [], `${context}: full Compose fixture validates cleanly`);
+      const yaml = generator.workspaceToCode(integrationWorkspace);
+      assert.equal(yaml, expectedYaml, `${context}: full Compose YAML preserves service, section and environment order`);
+      assert.equal(generator.workspaceToCode(integrationWorkspace), yaml,
+        `${context}: repeated generation is deterministic`);
+      assert.deepEqual(parse(yaml), {
+        services: {
+          frontend: {
+            image: 'nginx', ports: ['8080:80'],
+            environment: { NODE_ENV: 'production' },
+            volumes: ['./frontend:/usr/share/nginx/html']
+          },
+          backend: {
+            image: 'node:20', ports: ['3000:3000'],
+            environment: { NODE_ENV: 'production', API_PORT: '3000' },
+            volumes: ['./data:/app/data']
+          }
+        }
+      }, `${context}: YAML parses with every service property and a string numeric environment value`);
+      console.log(`[PASS] ${context}: full multi-service Compose validation, exact YAML, deterministic order and parsed values`);
+
+      const invalidFields = [
+        [backend.service, 'IMAGE', '', 'node:20', 'Image is required'],
+        [backend.port, 'HOST_PORT', '65536', '3000', 'Host port must be an integer between 1 and 65535.'],
+        [apiPort, 'KEY', '1INVALID', 'API_PORT', 'Environment key must start with a letter or underscore and contain only letters, numbers, and underscores.'],
+        [backend.volume, 'SOURCE', '', './data', 'Volume source is required.'],
+        [backend.volume, 'TARGET', '   ', '/app/data', 'Volume target is required.']
+      ];
+      for (const [block, field, invalid] of invalidFields) {
+        block.setFieldValue(invalid, field);
+      }
+      const expectedErrors = invalidFields.map(([block, , , , message]) => ({
+        type: 'validation', message, severity: 'error', blockId: block.id
+      }));
+      function assertErrors(expected) {
+        const errors = collect();
+        assert.equal(errors.length, expected.length, `${context}: no missing or extra validation errors`);
+        for (const block of integrationWorkspace.getAllBlocks(false)) {
+          assert.deepEqual(
+            errors.filter((error) => error.blockId === block.id),
+            expected.filter((error) => error.blockId === block.id),
+            `${context}: ${block.type} ${block.id} receives only its own expected errors`
+          );
+        }
+      }
+      assertErrors(expectedErrors);
+      console.log(`[PASS] ${context}: simultaneous Service, Port, Environment and Volume errors have exact messages and block IDs; unrelated blocks remain clean`);
+
+      for (const [index, [block, field, , valid]] of invalidFields.entries()) {
+        block.setFieldValue(valid, field);
+        assertErrors(expectedErrors.slice(index + 1));
+      }
+      assert.deepEqual(collect(), [], `${context}: correcting all invalid fields clears validation`);
+      assert.equal(generator.workspaceToCode(integrationWorkspace), expectedYaml,
+        `${context}: corrected workspace restores the full expected YAML`);
+      console.log(`[PASS] ${context}: incremental corrections clear only resolved errors and restore valid Compose YAML`);
+    } finally {
+      integrationWorkspace.dispose();
+    }
+
     const volumeWorkspace = new Blockly.Workspace();
     try {
       const collect = new Function('workspace', outputText + '\nreturn collectWorkspaceValidationErrors;')(volumeWorkspace);
