@@ -35,7 +35,7 @@ async function loadTypescriptModule(sourcePath, tempPath) {
   );
 }
 
-console.log('\nDocker Regression Tests (S2-12 / S3-09)\n');
+console.log('\nDocker Regression Tests\n');
 
 try {
   const { defineBlocks } = await loadTypescriptModule(

@@ -1,5 +1,8 @@
 # Initial Docker Compose Block Model
 
+> Historical Sprint 2 design note. For the implemented subset, see the
+> [current Docker documentation](README.md#supported-docker-compose-subset).
+
 ## Goal
 
 Define the smallest useful Docker Compose block model that can be implemented as the first vertical slice in Sprint 2.
