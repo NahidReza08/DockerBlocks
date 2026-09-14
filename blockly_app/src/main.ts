@@ -57,17 +57,17 @@ const errorOutput = document.getElementById('errorOutput');
 const VALIDATION_WARNING_ID = 'captured-validation-error';
 
 function collectWorkspaceValidationErrors(): UiValidationError[] {
+  function trimFieldValue(value: unknown): string {
+    return String(value ?? '').trim();
+  }
+
   const errors: UiValidationError[] = [];
 
   workspace.getAllBlocks(false).forEach((block) => {
     if (block.type === 'service') {
-      const name = String(
-        block.getFieldValue('NAME') ?? ''
-      ).trim();
+      const name = trimFieldValue(block.getFieldValue('NAME'));
 
-      const image = String(
-        block.getFieldValue('IMAGE') ?? ''
-      ).trim();
+      const image = trimFieldValue(block.getFieldValue('IMAGE'));
 
       if (name.length === 0) {
         errors.push({
@@ -89,13 +89,9 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
     }
 
     if (block.type === 'port') {
-      const hostPort = String(
-        block.getFieldValue('HOST_PORT') ?? ''
-      ).trim();
+      const hostPort = trimFieldValue(block.getFieldValue('HOST_PORT'));
 
-      const containerPort = String(
-        block.getFieldValue('CONTAINER_PORT') ?? ''
-      ).trim();
+      const containerPort = trimFieldValue(block.getFieldValue('CONTAINER_PORT'));
 
       if (hostPort.length === 0) {
         errors.push({
@@ -151,9 +147,7 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
     }
 
     if (block.type === 'environment') {
-      const key = String(
-        block.getFieldValue('KEY') ?? ''
-      ).trim();
+      const key = trimFieldValue(block.getFieldValue('KEY'));
 
       if (key.length === 0) {
         errors.push({
@@ -173,13 +167,9 @@ function collectWorkspaceValidationErrors(): UiValidationError[] {
     }
 
     if (block.type === 'volume') {
-      const source = String(
-        block.getFieldValue('SOURCE') ?? ''
-      ).trim();
+      const source = trimFieldValue(block.getFieldValue('SOURCE'));
 
-      const target = String(
-        block.getFieldValue('TARGET') ?? ''
-      ).trim();
+      const target = trimFieldValue(block.getFieldValue('TARGET'));
 
       if (source.length === 0) {
         errors.push({
