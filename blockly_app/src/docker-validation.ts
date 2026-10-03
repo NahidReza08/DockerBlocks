@@ -42,14 +42,20 @@ export function collectDockerValidationErrors(
   workspace: Blockly.Workspace
 ): UiValidationError[] {
   const errors: UiValidationError[] = [];
+  const serviceBlocksByName = new Map<string, Blockly.Block[]>();
 
   workspace.getAllBlocks(false).forEach((block) => {
     if (block.type === 'service') {
-      const name = trimFieldValue(block.getFieldValue('NAME'));
+      const rawName = String(block.getFieldValue('NAME') ?? '');
+      const name = trimFieldValue(rawName);
       const image = trimFieldValue(block.getFieldValue('IMAGE'));
 
       if (name.length === 0) {
         errors.push(requiredError('Service name is required.', block.id));
+      } else {
+        const serviceBlocks = serviceBlocksByName.get(rawName) ?? [];
+        serviceBlocks.push(block);
+        serviceBlocksByName.set(rawName, serviceBlocks);
       }
 
       if (image.length === 0) {
@@ -100,6 +106,14 @@ export function collectDockerValidationErrors(
         errors.push(requiredError('Volume target is required.', block.id));
       }
     }
+  });
+
+  serviceBlocksByName.forEach((blocks, name) => {
+    if (blocks.length < 2) return;
+
+    blocks.forEach((block) => {
+      errors.push(requiredError(`Duplicate service name "${name}".`, block.id));
+    });
   });
 
   return errors;

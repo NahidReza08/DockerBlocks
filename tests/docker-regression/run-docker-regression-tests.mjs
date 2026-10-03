@@ -339,6 +339,72 @@ try {
       }, `${context}: YAML parses with every service property and a string numeric environment value`);
       console.log(`[PASS] ${context}: full multi-service Compose validation, exact YAML, deterministic order and parsed values`);
 
+      function assertDuplicateServiceErrors(blocks, name) {
+        const errors = collectWorkspace();
+        const expected = blocks.map((block) => ({
+          type: 'validation',
+          message: `Duplicate service name "${name}".`,
+          severity: 'error',
+          blockId: block.id
+        })).sort((left, right) => left.blockId.localeCompare(right.blockId));
+        const actual = errors
+          .filter((error) => error.message === `Duplicate service name "${name}".`)
+          .sort((left, right) => left.blockId.localeCompare(right.blockId));
+
+        assert.deepEqual(
+          actual,
+          expected,
+          `${context}: every duplicate "${name}" service receives a duplicate-name error`
+        );
+      }
+
+      backend.service.setFieldValue('frontend', 'NAME');
+      assertDuplicateServiceErrors([backend.service, frontend.service], 'frontend');
+      console.log(`[PASS] ${context}: duplicate service names flag both conflicting services`);
+
+      const duplicateThird = createService('frontend', 'redis', '6379', '6379', './cache', '/data');
+      backend.service.nextConnection.connect(duplicateThird.service.previousConnection);
+      assertDuplicateServiceErrors(
+        [backend.service, frontend.service, duplicateThird.service],
+        'frontend'
+      );
+      console.log(`[PASS] ${context}: three duplicate service names flag all conflicting services`);
+
+      backend.service.setFieldValue('backend', 'NAME');
+      duplicateThird.service.setFieldValue('worker', 'NAME');
+      assert.deepEqual(collectWorkspace(), [], `${context}: different service names remain valid`);
+      console.log(`[PASS] ${context}: different service names remain valid`);
+
+      duplicateThird.service.setFieldValue(' backend ', 'NAME');
+      assert.deepEqual(collectWorkspace(), [], `${context}: duplicate validation uses raw service-name semantics`);
+      duplicateThird.service.setFieldValue('worker', 'NAME');
+      console.log(`[PASS] ${context}: duplicate validation follows raw service-name semantics`);
+
+      duplicateThird.service.setFieldValue('backend', 'NAME');
+      assertDuplicateServiceErrors([backend.service, duplicateThird.service], 'backend');
+      duplicateThird.service.setFieldValue('worker', 'NAME');
+      assert.deepEqual(collectWorkspace(), [], `${context}: renaming duplicate service clears duplicate errors`);
+      console.log(`[PASS] ${context}: duplicate error clears after renaming one service`);
+
+      duplicateThird.service.setFieldValue('backend', 'NAME');
+      assertDuplicateServiceErrors([backend.service, duplicateThird.service], 'backend');
+      duplicateThird.service.dispose(true);
+      assert.deepEqual(collectWorkspace(), [], `${context}: removing duplicate service clears duplicate errors`);
+      console.log(`[PASS] ${context}: duplicate error clears after removing the conflicting service`);
+
+      backend.service.setFieldValue('', 'NAME');
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === backend.service.id),
+        [{
+          type: 'validation',
+          message: 'Service name is required.',
+          severity: 'error',
+          blockId: backend.service.id
+        }],
+        `${context}: empty service names keep the existing required-name validation only`
+      );
+      backend.service.setFieldValue('backend', 'NAME');
+
       const invalidFields = [
         [backend.service, 'IMAGE', '', 'node:20', 'Image is required'],
         [backend.port, 'HOST_PORT', '65536', '3000', 'Host port must be an integer between 1 and 65535.'],

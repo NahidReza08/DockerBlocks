@@ -91,6 +91,37 @@ try {
   // A queued Blockly event must not bring cleared errors back.
   vm.runInContext('app.handleWorkspaceChange()', context);
   clean();
+  const compose = workspace.newBlock('compose');
+  const duplicateA = workspace.newBlock('service');
+  const duplicateB = workspace.newBlock('service');
+  duplicateA.setFieldValue('web', 'NAME');
+  duplicateA.setFieldValue('nginx', 'IMAGE');
+  duplicateB.setFieldValue('web', 'NAME');
+  duplicateB.setFieldValue('node', 'IMAGE');
+  compose.getInput('SERVICES').connection.connect(duplicateA.previousConnection);
+  duplicateA.nextConnection.connect(duplicateB.previousConnection);
+  for (const block of [duplicateA, duplicateB]) {
+    block.lastValidationWarning = undefined;
+    block.setWarningText = (text, id) => {
+      if (id === 'captured-validation-error') {
+        block.lastValidationWarning = text;
+      }
+    };
+  }
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  assert.equal(elements.errorOutput.children.length, 2, 'Duplicate service names render both errors');
+  for (const child of elements.errorOutput.children) {
+    assert.equal(child.children[1].textContent, 'Duplicate service name "web".');
+  }
+  assert.equal(duplicateA.lastValidationWarning, 'Duplicate service name "web".');
+  assert.equal(duplicateB.lastValidationWarning, 'Duplicate service name "web".');
+  duplicateB.setFieldValue('api', 'NAME');
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  clean();
+  assert.equal(duplicateA.lastValidationWarning, null);
+  assert.equal(duplicateB.lastValidationWarning, null);
+  click('clearWorkspace');
+  clean();
   for (let i = 0; i < 2; i++) {
     click('loadExample');
     assert.equal(elements.codeOutput.textContent, expected, 'Load Example generates exact D04 YAML');
