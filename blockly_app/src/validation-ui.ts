@@ -4,15 +4,53 @@ import type { UiValidationError } from './app-types';
 
 const VALIDATION_WARNING_ID = 'captured-validation-error';
 
-const SUCCESS_GROUPS = [
-  ['Service names unique', 'All service names are valid and unique.'],
-  ['Service configuration valid', 'Every service has an image or build configuration.'],
-  ['Ports valid', 'All port mappings are valid.'],
-  ['Dependencies valid', 'All service dependencies are valid.'],
-  ['Networks valid', 'All network references are valid.'],
-  ['Healthchecks valid', 'All healthcheck configurations are valid.'],
-  ['Build settings valid', 'All build contexts are valid.'],
-  ['Volumes valid', 'All volume mappings are valid.']
+type ValidationGroup = {
+  blockTypes: string[];
+  message: string;
+  title: string;
+};
+
+const SUCCESS_GROUPS: ValidationGroup[] = [
+  {
+    blockTypes: ['service'],
+    title: 'Service configuration valid',
+    message: 'Service names are unique and each service has image or build configuration.'
+  },
+  {
+    blockTypes: ['port'],
+    title: 'Ports valid',
+    message: 'Port mappings are valid.'
+  },
+  {
+    blockTypes: ['dependency'],
+    title: 'Dependencies valid',
+    message: 'Service dependencies reference existing services.'
+  },
+  {
+    blockTypes: ['network', 'networkref'],
+    title: 'Networks valid',
+    message: 'Network declarations and references are valid.'
+  },
+  {
+    blockTypes: ['healthcheck'],
+    title: 'Healthcheck valid',
+    message: 'Healthcheck configuration is valid.'
+  },
+  {
+    blockTypes: ['build'],
+    title: 'Build settings valid',
+    message: 'Build context is valid.'
+  },
+  {
+    blockTypes: ['environment'],
+    title: 'Environment valid',
+    message: 'Environment entries use valid keys.'
+  },
+  {
+    blockTypes: ['volume'],
+    title: 'Volumes valid',
+    message: 'Volume mappings have source and target values.'
+  }
 ];
 
 function createTextElement(
@@ -99,16 +137,31 @@ function showNoValidationErrors(
 
   errorOutput.replaceChildren();
 
-  if (workspace.getAllBlocks(false).length === 0) {
+  const blocks = workspace.getAllBlocks(false);
+
+  if (blocks.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'validation-empty';
-    empty.textContent = 'Add blocks or validate the workspace to see results.';
+    empty.textContent = 'No configuration to validate yet.';
     errorOutput.appendChild(empty);
     return;
   }
 
-  SUCCESS_GROUPS.forEach(([title, message]) => {
-    errorOutput.appendChild(createValidationCheckElement(title, message));
+  const blockTypes = new Set(blocks.map((block) => block.type));
+  const relevantGroups = SUCCESS_GROUPS.filter((group) =>
+    group.blockTypes.some((type) => blockTypes.has(type))
+  );
+
+  if (relevantGroups.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'validation-empty';
+    empty.textContent = 'Add a Service block to validate a Docker Compose configuration.';
+    errorOutput.appendChild(empty);
+    return;
+  }
+
+  relevantGroups.forEach((group) => {
+    errorOutput.appendChild(createValidationCheckElement(group.title, group.message));
   });
 }
 

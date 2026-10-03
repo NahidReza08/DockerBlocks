@@ -29,6 +29,7 @@ function element() {
   return {
     textContent: '', children: [], listeners: {},
     className: '',
+    hidden: false,
     value: '',
     title: '',
     classList: {
@@ -60,10 +61,13 @@ function validationMessages() {
 
 const ids = [
   'codeOutput', 'errorOutput', 'actionStatus', 'yamlStatus',
-  'summaryServices', 'summaryNetworks', 'summaryDependencies', 'summaryHealthchecks',
+  'summaryEmpty', 'summaryServicesItem', 'summaryNetworksItem', 'summaryVolumesItem',
+  'summaryDependenciesItem', 'summaryHealthchecksItem',
+  'summaryServices', 'summaryNetworks', 'summaryVolumes', 'summaryDependencies', 'summaryHealthchecks',
   'exampleSelect', 'loadExample', 'validateWorkspace', 'clearWorkspace', 'copyYaml', 'downloadYaml'
 ];
 const elements = Object.fromEntries(ids.map(id => [id, element()]));
+elements.copyYaml.textContent = '⧉ Copy YAML';
 const workspace = new Blockly.Workspace();
 workspace.scroll = () => {};
 const anchors = [];
@@ -79,7 +83,7 @@ const context = vm.createContext({
     createObjectURL(blob) { downloads.push(blob); return 'blob:yaml'; },
     revokeObjectURL(url) { revoked.push(url); }
   },
-  setTimeout(callback) { timers.push(callback); },
+  setTimeout(callback, delay) { timers.push({ callback, delay }); },
   document: {
     getElementById: id => elements[id], body: element(),
     createElement(tag) {
@@ -92,12 +96,15 @@ const context = vm.createContext({
 const click = id => elements[id].listeners.click();
 const clean = () => {
   assert.ok(
-    elements.errorOutput.children.length === 1 ||
-      elements.errorOutput.children.length === 8,
-    'Validation panel should show empty state or grouped successful checks'
+    elements.errorOutput.children.length >= 1,
+    'Validation panel should show empty state or relevant successful checks'
   );
   assert.equal(validationMessages().some(message => message.includes('Validation issue')), false);
 };
+
+function validationText() {
+  return textContentDeep(elements.errorOutput);
+}
 
 try {
   execute(read('blockly_app/src/docker-yaml.ts'), context);
@@ -149,22 +156,43 @@ try {
   );
   assert.equal(elements.exampleSelect.value, 'simple-web-service');
   assert.equal(elements.codeOutput.textContent, '', 'Initial output is empty YAML');
-  assert.equal(elements.yamlStatus.textContent, 'Waiting for blocks');
+  assert.equal(elements.yamlStatus.textContent, 'Waiting for configuration');
   assert.equal(elements.summaryServices.textContent, '0');
+  assert.equal(elements.summaryEmpty.hidden, false);
+  assert.equal(elements.summaryServicesItem.hidden, true);
+  assert.equal(validationText(), 'No configuration to validate yet.');
+  assert.equal(validationText().includes('Ports valid'), false, 'Empty workspace does not show unrelated green validation');
   const invalid = workspace.newBlock('service');
   invalid.setFieldValue('', 'NAME');
   invalid.setFieldValue('', 'IMAGE');
+  invalid.lastValidationWarning = undefined;
+  invalid.setWarningText = (text, id) => {
+    if (id === 'captured-validation-error') {
+      invalid.lastValidationWarning = text;
+    }
+  };
   vm.runInContext('app.handleWorkspaceChange()', context);
   assert.equal(elements.errorOutput.children[0].className, 'validation-error');
   assert.deepEqual(validationMessages(), [
     'Service name is required.',
     'Service requires an image or build configuration.'
   ]);
+  assert.match(invalid.lastValidationWarning, /Service name is required/);
+  assert.match(invalid.lastValidationWarning, /Service requires an image or build configuration/);
   assert.equal(elements.yamlStatus.textContent, 'Validation errors');
+  assert.equal(validationText().includes('Healthcheck valid'), false, 'Invalid state omits unrelated success rows');
+  invalid.setFieldValue('web', 'NAME');
+  invalid.setFieldValue('nginx:latest', 'IMAGE');
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  assert.equal(invalid.lastValidationWarning, null);
+  assert.equal(elements.yamlStatus.textContent, 'Valid Compose');
+  assert.equal(validationText().includes('Service configuration valid'), true);
+  assert.equal(validationText().includes('Ports valid'), false, 'No ports means no Ports valid row');
   click('clearWorkspace');
   assert.equal(workspace.getAllBlocks(false).length, 0);
   assert.equal(elements.codeOutput.textContent, '');
-  assert.equal(elements.yamlStatus.textContent, 'Waiting for blocks');
+  assert.equal(elements.yamlStatus.textContent, 'Waiting for configuration');
+  assert.equal(elements.summaryEmpty.hidden, false);
   clean();
   // A queued Blockly event must not bring cleared errors back.
   vm.runInContext('app.handleWorkspaceChange()', context);
@@ -280,9 +308,20 @@ try {
     assert.equal(workspace.getAllBlocks(false).length, 4, 'Reload replaces blocks with compact simple example');
     assert.equal(elements.summaryServices.textContent, '1');
     assert.equal(elements.summaryNetworks.textContent, '0');
+    assert.equal(elements.summaryVolumes.textContent, '0');
     assert.equal(elements.summaryDependencies.textContent, '0');
     assert.equal(elements.summaryHealthchecks.textContent, '0');
-    assert.equal(elements.yamlStatus.textContent, 'Valid YAML');
+    assert.equal(elements.summaryEmpty.hidden, true);
+    assert.equal(elements.summaryServicesItem.hidden, false);
+    assert.equal(elements.summaryNetworksItem.hidden, true);
+    assert.equal(elements.summaryVolumesItem.hidden, true);
+    assert.equal(elements.summaryDependenciesItem.hidden, true);
+    assert.equal(elements.summaryHealthchecksItem.hidden, true);
+    assert.equal(elements.yamlStatus.textContent, 'Valid Compose');
+    assert.equal(validationText().includes('Service configuration valid'), true);
+    assert.equal(validationText().includes('Ports valid'), true);
+    assert.equal(validationText().includes('Dependencies valid'), false);
+    assert.equal(validationText().includes('Healthcheck valid'), false);
     clean();
   }
   elements.exampleSelect.value = 'multi-service-application';
@@ -290,9 +329,21 @@ try {
   assert.equal(elements.actionStatus.textContent, 'Multi-Service Application loaded.');
   assert.equal(elements.summaryServices.textContent, '2');
   assert.equal(elements.summaryNetworks.textContent, '1');
+  assert.equal(elements.summaryVolumes.textContent, '1');
   assert.equal(elements.summaryDependencies.textContent, '1');
   assert.equal(elements.summaryHealthchecks.textContent, '1');
-  assert.equal(elements.yamlStatus.textContent, 'Valid YAML');
+  assert.equal(elements.summaryEmpty.hidden, true);
+  assert.equal(elements.summaryServicesItem.hidden, false);
+  assert.equal(elements.summaryNetworksItem.hidden, false);
+  assert.equal(elements.summaryVolumesItem.hidden, false);
+  assert.equal(elements.summaryDependenciesItem.hidden, false);
+  assert.equal(elements.summaryHealthchecksItem.hidden, false);
+  assert.equal(elements.yamlStatus.textContent, 'Valid Compose');
+  assert.equal(validationText().includes('Build settings valid'), true);
+  assert.equal(validationText().includes('Dependencies valid'), true);
+  assert.equal(validationText().includes('Networks valid'), true);
+  assert.equal(validationText().includes('Healthcheck valid'), true);
+  assert.equal(validationText().includes('Volumes valid'), true);
   for (const expectedSection of multiExpectedSections) {
     assert.ok(
       elements.codeOutput.textContent.includes(expectedSection),
@@ -306,13 +357,16 @@ try {
     if (!yaml) click('clearWorkspace');
     await click('copyYaml');
     assert.equal(copied, yaml, 'Copy preserves all YAML content');
-    assert.equal(elements.actionStatus.textContent, 'YAML copied.');
+    assert.equal(elements.copyYaml.textContent, '✓ Copied');
+    assert.equal(timers.at(-1).delay, 1400, 'Copy feedback resets after a short delay');
+    timers.pop().callback();
+    assert.match(elements.copyYaml.textContent, /Copy YAML/);
     click('downloadYaml');
     assert.equal(await downloads.at(-1).text(), yaml, 'Download preserves all YAML content');
     assert.equal(anchors.at(-1).download, 'docker-compose.yml');
     assert.equal(anchors.at(-1).href, 'blob:yaml');
     assert.ok(anchors.at(-1).clicked && anchors.at(-1).removed);
-    timers.shift()();
+    timers.shift().callback();
     assert.equal(revoked.at(-1), 'blob:yaml');
   }
   navigator.clipboard.writeText = async () => { throw new Error('Permission denied'); };

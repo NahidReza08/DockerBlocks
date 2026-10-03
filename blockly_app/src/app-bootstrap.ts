@@ -46,12 +46,21 @@ export function bootstrapBlocklyApp({
   const actionStatus = document.getElementById('actionStatus');
   const yamlStatus = document.getElementById('yamlStatus');
   const exampleSelect = document.getElementById('exampleSelect') as HTMLSelectElement | null;
+  const copyYamlButton = document.getElementById('copyYaml');
   const validationUi = createValidationUi(workspace, errorOutput);
   const summaryElements = {
     service: document.getElementById('summaryServices'),
     network: document.getElementById('summaryNetworks'),
     dependency: document.getElementById('summaryDependencies'),
-    healthcheck: document.getElementById('summaryHealthchecks')
+    healthcheck: document.getElementById('summaryHealthchecks'),
+    volume: document.getElementById('summaryVolumes')
+  };
+  const summaryItems = {
+    service: document.getElementById('summaryServicesItem'),
+    network: document.getElementById('summaryNetworksItem'),
+    dependency: document.getElementById('summaryDependenciesItem'),
+    healthcheck: document.getElementById('summaryHealthchecksItem'),
+    volume: document.getElementById('summaryVolumesItem')
   };
 
   function collectValidationErrors() {
@@ -61,8 +70,28 @@ export function bootstrapBlocklyApp({
     ];
   }
 
-  function workspaceHasBlocks() {
-    return workspace.getAllBlocks(false).length > 0;
+  function getBlockCounts() {
+    const counts = {
+      service: 0,
+      network: 0,
+      dependency: 0,
+      healthcheck: 0,
+      volume: 0
+    };
+
+    workspace.getAllBlocks(false).forEach((block) => {
+      if (block.type === 'service') counts.service += 1;
+      if (block.type === 'network') counts.network += 1;
+      if (block.type === 'dependency') counts.dependency += 1;
+      if (block.type === 'healthcheck') counts.healthcheck += 1;
+      if (block.type === 'volume') counts.volume += 1;
+    });
+
+    return counts;
+  }
+
+  function hasMeaningfulComposeConfiguration() {
+    return getBlockCounts().service > 0;
   }
 
   function updateYamlStatus(errors: UiValidationError[], code: string) {
@@ -70,8 +99,14 @@ export function bootstrapBlocklyApp({
 
     yamlStatus.classList.remove('invalid', 'neutral');
 
-    if (!code.trim() || !workspaceHasBlocks()) {
-      yamlStatus.textContent = 'Waiting for blocks';
+    if (workspace.getAllBlocks(false).length === 0) {
+      yamlStatus.textContent = 'Waiting for configuration';
+      yamlStatus.classList.add('neutral');
+      return;
+    }
+
+    if (!code.trim() || !hasMeaningfulComposeConfiguration()) {
+      yamlStatus.textContent = 'Incomplete configuration';
       yamlStatus.classList.add('neutral');
       return;
     }
@@ -82,27 +117,44 @@ export function bootstrapBlocklyApp({
       return;
     }
 
-    yamlStatus.textContent = 'Valid YAML';
+    yamlStatus.textContent = 'Valid Compose';
   }
 
   function updateWorkspaceSummary() {
-    const counts = {
-      service: 0,
-      network: 0,
-      dependency: 0,
-      healthcheck: 0
-    };
-
-    workspace.getAllBlocks(false).forEach((block) => {
-      if (block.type === 'service') counts.service += 1;
-      if (block.type === 'network') counts.network += 1;
-      if (block.type === 'dependency') counts.dependency += 1;
-      if (block.type === 'healthcheck') counts.healthcheck += 1;
-    });
+    const counts = getBlockCounts();
+    let visibleCount = 0;
 
     Object.entries(summaryElements).forEach(([type, element]) => {
-      if (element) element.textContent = String(counts[type as keyof typeof counts]);
+      const count = counts[type as keyof typeof counts];
+      const item = summaryItems[type as keyof typeof summaryItems];
+
+      if (element) element.textContent = String(count);
+
+      if (item) {
+        item.hidden = count === 0;
+        if (count > 0) visibleCount += 1;
+      }
     });
+
+    const emptySummary = document.getElementById('summaryEmpty');
+    if (emptySummary) emptySummary.hidden = visibleCount > 0;
+  }
+
+  function openInitialToolboxCategory() {
+    try {
+      const workspaceSvg = workspace as Blockly.WorkspaceSvg;
+      const toolbox = workspaceSvg.getToolbox?.();
+      const toolboxWithItems = toolbox as typeof toolbox & {
+        getToolboxItems?: () => unknown[];
+      };
+      const firstItem = toolboxWithItems?.getToolboxItems?.()[0];
+
+      if (firstItem && !toolbox?.getSelectedItem?.()) {
+        toolbox?.setSelectedItem(firstItem as Blockly.IToolboxItem);
+      }
+    } catch {
+      // Headless tests do not render a Blockly toolbox.
+    }
   }
 
   function resizeWorkspace() {
@@ -183,7 +235,13 @@ export function bootstrapBlocklyApp({
   async function copyYaml() {
     try {
       await navigator.clipboard.writeText(generator.workspaceToCode(workspace));
-      showActionStatus('YAML copied.');
+      if (copyYamlButton) {
+        const previousText = copyYamlButton.textContent || '⧉ Copy YAML';
+        copyYamlButton.textContent = '✓ Copied';
+        setTimeout(() => {
+          copyYamlButton.textContent = previousText;
+        }, 1400);
+      }
     } catch {
       showActionStatus('Could not copy YAML. Select the generated code and copy it manually.');
     }
@@ -221,6 +279,7 @@ export function bootstrapBlocklyApp({
   }
 
   handleWorkspaceChange();
+  openInitialToolboxCategory();
 
   return {
     workspace,

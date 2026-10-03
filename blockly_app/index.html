@@ -19,8 +19,8 @@
         --purple: #7047d8;
         --orange: #f97316;
         --red: #ef334e;
-        --radius: 8px;
-        --shadow: 0 10px 28px rgba(15, 75, 120, 0.12);
+        --radius: 7px;
+        --shadow: 0 4px 14px rgba(15, 75, 120, 0.08);
       }
 
       * { box-sizing: border-box; }
@@ -54,33 +54,33 @@
       .app-shell {
         min-height: 100vh;
         display: grid;
-        grid-template-rows: auto minmax(520px, 1fr) auto;
-        gap: 12px;
-        padding: 14px;
+        grid-template-rows: auto minmax(560px, 1fr) auto;
+        gap: 8px;
+        padding: 8px;
       }
 
       .app-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 20px;
-        padding: 12px 18px;
+        gap: 14px;
+        padding: 8px 12px;
         background: rgba(255, 255, 255, 0.92);
         border: 1px solid rgba(215, 231, 245, 0.9);
-        border-radius: 0 0 14px 14px;
+        border-radius: var(--radius);
         box-shadow: var(--shadow);
       }
 
       .brand {
         display: flex;
         align-items: center;
-        gap: 14px;
-        min-width: 260px;
+        gap: 10px;
+        min-width: 250px;
       }
 
       .brand-mark {
-        width: 74px;
-        height: 44px;
+        width: 56px;
+        height: 34px;
         position: relative;
         flex: 0 0 auto;
       }
@@ -90,8 +90,8 @@
         position: absolute;
         left: 4px;
         bottom: 3px;
-        width: 58px;
-        height: 26px;
+        width: 44px;
+        height: 20px;
         background: var(--blue);
         border-radius: 5px 5px 24px 24px;
       }
@@ -99,40 +99,40 @@
       .brand-mark::after {
         content: "";
         position: absolute;
-        left: 12px;
-        top: 3px;
-        width: 9px;
-        height: 9px;
+        left: 9px;
+        top: 2px;
+        width: 7px;
+        height: 7px;
         background: var(--blue);
         box-shadow:
-          11px 0 0 var(--blue), 22px 0 0 var(--blue), 33px 0 0 var(--blue),
-          11px 11px 0 var(--blue), 22px 11px 0 var(--blue), 33px 11px 0 var(--blue),
-          44px 20px 0 var(--blue);
+          9px 0 0 var(--blue), 18px 0 0 var(--blue), 27px 0 0 var(--blue),
+          9px 9px 0 var(--blue), 18px 9px 0 var(--blue), 27px 9px 0 var(--blue),
+          35px 16px 0 var(--blue);
       }
 
       .brand h1 {
         margin: 0;
-        font-size: clamp(28px, 2.3vw, 40px);
+        font-size: clamp(24px, 1.9vw, 28px);
         line-height: 1;
         letter-spacing: 0;
       }
 
       .brand p {
-        margin: 5px 0 0;
+        margin: 3px 0 0;
         color: var(--muted);
-        font-size: 18px;
+        font-size: 13px;
         font-weight: 650;
       }
 
       .top-actions, .yaml-actions {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 8px;
         flex-wrap: wrap;
       }
 
       .example-picker {
-        min-height: 46px;
+        min-height: 36px;
         display: inline-flex;
         align-items: center;
         gap: 8px;
@@ -142,11 +142,12 @@
         background: #ffffff;
         color: var(--muted);
         font-weight: 750;
-        box-shadow: 0 8px 18px rgba(15, 75, 120, 0.08);
+        box-shadow: 0 3px 8px rgba(15, 75, 120, 0.06);
+        font-size: 13px;
       }
 
       .example-picker select {
-        min-width: 210px;
+        min-width: 205px;
         border: 0;
         color: var(--text);
         background: transparent;
@@ -160,14 +161,15 @@
       }
 
       .action-button {
-        min-height: 46px;
-        padding: 0 18px;
+        min-height: 36px;
+        padding: 0 13px;
         color: #ffffff;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 10px;
-        box-shadow: 0 8px 18px rgba(15, 75, 120, 0.16);
+        gap: 7px;
+        box-shadow: 0 4px 10px rgba(15, 75, 120, 0.12);
+        font-size: 13px;
         transition: transform 120ms ease, filter 120ms ease;
       }
 
@@ -182,7 +184,7 @@
       .main-grid {
         display: grid;
         grid-template-columns: minmax(560px, 1fr) minmax(360px, 31vw);
-        gap: 12px;
+        gap: 8px;
         min-height: 0;
       }
 
@@ -198,12 +200,12 @@
       }
 
       .panel-header {
-        min-height: 48px;
+        min-height: 38px;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 10px 14px;
+        padding: 7px 10px;
         border-bottom: 1px solid var(--border);
         background: linear-gradient(180deg, #ffffff, var(--panel-soft));
       }
@@ -211,15 +213,15 @@
       .panel-title {
         display: flex;
         align-items: center;
-        gap: 10px;
-        font-size: 18px;
+        gap: 7px;
+        font-size: 15px;
         font-weight: 800;
         color: var(--text);
       }
 
       .panel-icon {
         color: var(--blue);
-        font-size: 22px;
+        font-size: 16px;
       }
 
       .workspace-panel { position: relative; }
@@ -227,30 +229,31 @@
       #blocklyDiv {
         flex: 1;
         width: 100%;
-        min-height: 520px;
+        min-height: 560px;
         background: #ffffff;
       }
 
       .workspace-hint {
         position: absolute;
-        left: 292px;
-        bottom: 18px;
-        padding: 8px 10px;
+        left: 270px;
+        bottom: 12px;
+        padding: 6px 8px;
         border: 1px solid rgba(16, 135, 245, 0.16);
         border-radius: var(--radius);
         color: var(--muted);
         background: rgba(255, 255, 255, 0.86);
-        font-size: 13px;
+        font-size: 12px;
         pointer-events: none;
       }
 
       .status-pill {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         border-radius: var(--radius);
-        padding: 7px 10px;
+        padding: 5px 8px;
         font-weight: 800;
+        font-size: 12px;
         background: #e7f8f0;
         color: #087346;
       }
@@ -268,13 +271,13 @@
         height: 100%;
         min-height: 0;
         margin: 0;
-        padding: 16px 18px;
+        padding: 12px 14px;
         overflow: auto;
         color: #005eea;
         background: #ffffff;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-        font-size: 14px;
-        line-height: 1.55;
+        font-size: 13px;
+        line-height: 1.45;
         white-space: pre;
       }
 
@@ -288,14 +291,14 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        padding: 12px;
+        gap: 8px;
+        padding: 8px;
         border-top: 1px solid var(--border);
         background: var(--panel-soft);
       }
 
       #actionStatus {
-        min-height: 18px;
+        min-height: 16px;
         color: var(--muted);
         font-size: 13px;
         font-weight: 650;
@@ -304,15 +307,15 @@
       .bottom-grid {
         display: grid;
         grid-template-columns: minmax(420px, 1fr) minmax(360px, 0.95fr);
-        gap: 12px;
+        gap: 8px;
       }
 
       #errorOutput {
-        min-height: 116px;
-        padding: 12px 14px;
+        min-height: 88px;
+        padding: 9px 10px;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px 18px;
+        gap: 6px 10px;
         overflow: auto;
       }
 
@@ -324,9 +327,9 @@
 
       .validation-check, .validation-error {
         display: grid;
-        grid-template-columns: 28px minmax(0, 1fr);
-        gap: 10px;
-        padding: 8px 10px;
+        grid-template-columns: 22px minmax(0, 1fr);
+        gap: 8px;
+        padding: 6px 8px;
         border-radius: var(--radius);
       }
 
@@ -334,14 +337,15 @@
       .validation-error { background: #fff3f4; border: 1px solid #ffd0d7; }
 
       .validation-mark {
-        width: 24px;
-        height: 24px;
+        width: 20px;
+        height: 20px;
         border-radius: 999px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         color: #ffffff;
         background: var(--green);
+        font-size: 12px;
         font-weight: 900;
       }
 
@@ -351,52 +355,62 @@
         color: var(--text);
         font-weight: 800;
         line-height: 1.2;
+        font-size: 13px;
       }
 
       .validation-error-message, .validation-check-message, .validation-error-location {
         color: var(--muted);
         line-height: 1.25;
         overflow-wrap: anywhere;
+        font-size: 12px;
       }
 
       .validation-error-message { color: #8f1f31; }
 
-      .summary-grid {
-        padding: 12px 14px;
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 10px;
+      .summary-list {
+        padding: 9px 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
 
-      .summary-card {
+      .summary-chip {
         border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 16px 14px;
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        gap: 10px;
+        padding: 8px 10px;
+        display: inline-flex;
+        gap: 8px;
         align-items: center;
         background: linear-gradient(135deg, #f6fbff, #ffffff);
       }
 
-      .summary-card:nth-child(2) { background: linear-gradient(135deg, #f8f3ff, #ffffff); }
-      .summary-card:nth-child(3) { background: linear-gradient(135deg, #effcf6, #ffffff); }
-      .summary-card:nth-child(4) { background: linear-gradient(135deg, #fff7ed, #ffffff); }
+      .summary-chip[hidden], .summary-empty[hidden] { display: none; }
+      .summary-chip.network { background: linear-gradient(135deg, #f8f3ff, #ffffff); }
+      .summary-chip.volume { background: linear-gradient(135deg, #effcf6, #ffffff); }
+      .summary-chip.dependency { background: linear-gradient(135deg, #fff7ed, #ffffff); }
+      .summary-chip.healthcheck { background: linear-gradient(135deg, #fff5f7, #ffffff); }
 
-      .summary-icon { color: var(--blue); font-size: 28px; }
-      .summary-card:nth-child(2) .summary-icon { color: var(--purple); }
-      .summary-card:nth-child(3) .summary-icon { color: var(--green); }
-      .summary-card:nth-child(4) .summary-icon { color: var(--orange); }
+      .summary-icon { color: var(--blue); font-size: 18px; }
+      .summary-chip.network .summary-icon { color: var(--purple); }
+      .summary-chip.volume .summary-icon { color: var(--green); }
+      .summary-chip.dependency .summary-icon { color: var(--orange); }
+      .summary-chip.healthcheck .summary-icon { color: #ec4a72; }
 
       .summary-count {
-        font-size: 28px;
+        font-size: 16px;
         line-height: 1;
         font-weight: 900;
         color: var(--text);
       }
 
       .summary-label {
-        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .summary-empty {
         color: var(--muted);
         font-size: 13px;
         font-weight: 650;
@@ -432,7 +446,7 @@
         .example-picker { width: 100%; }
         .example-picker select { min-width: 0; flex: 1; }
         .action-button { flex: 1 1 160px; }
-        .summary-grid, #errorOutput { grid-template-columns: 1fr; }
+        #errorOutput { grid-template-columns: 1fr; }
       }
     </style>
   </head>
@@ -469,7 +483,7 @@
         <section class="panel yaml-panel" aria-label="Generated docker-compose YAML">
           <div class="panel-header">
             <div class="panel-title"><span class="panel-icon" aria-hidden="true">▤</span> docker-compose.yml</div>
-            <div id="yamlStatus" class="status-pill neutral" aria-live="polite">Waiting for blocks</div>
+            <div id="yamlStatus" class="status-pill neutral" aria-live="polite">Waiting for configuration</div>
           </div>
           <div class="yaml-body">
             <pre id="codeOutput" aria-label="Generated docker-compose.yml"></pre>
@@ -496,22 +510,32 @@
           <div class="panel-header">
             <div class="panel-title"><span class="panel-icon" aria-hidden="true">▥</span> Workspace Summary</div>
           </div>
-          <div class="summary-grid">
-            <div class="summary-card">
+          <div class="summary-list">
+            <div id="summaryEmpty" class="summary-empty">No workspace blocks yet.</div>
+            <div id="summaryServicesItem" class="summary-chip service" hidden>
               <div class="summary-icon" aria-hidden="true">▣</div>
-              <div><div id="summaryServices" class="summary-count">0</div><div class="summary-label">Services</div></div>
+              <div id="summaryServices" class="summary-count">0</div>
+              <div class="summary-label">Services</div>
             </div>
-            <div class="summary-card">
+            <div id="summaryNetworksItem" class="summary-chip network" hidden>
               <div class="summary-icon" aria-hidden="true">⌘</div>
-              <div><div id="summaryNetworks" class="summary-count">0</div><div class="summary-label">Networks</div></div>
+              <div id="summaryNetworks" class="summary-count">0</div>
+              <div class="summary-label">Networks</div>
             </div>
-            <div class="summary-card">
+            <div id="summaryVolumesItem" class="summary-chip volume" hidden>
+              <div class="summary-icon" aria-hidden="true">▤</div>
+              <div id="summaryVolumes" class="summary-count">0</div>
+              <div class="summary-label">Volumes</div>
+            </div>
+            <div id="summaryDependenciesItem" class="summary-chip dependency" hidden>
               <div class="summary-icon" aria-hidden="true">↔</div>
-              <div><div id="summaryDependencies" class="summary-count">0</div><div class="summary-label">Dependencies</div></div>
+              <div id="summaryDependencies" class="summary-count">0</div>
+              <div class="summary-label">Dependencies</div>
             </div>
-            <div class="summary-card">
+            <div id="summaryHealthchecksItem" class="summary-chip healthcheck" hidden>
               <div class="summary-icon" aria-hidden="true">♡</div>
-              <div><div id="summaryHealthchecks" class="summary-count">0</div><div class="summary-label">Healthchecks</div></div>
+              <div id="summaryHealthchecks" class="summary-count">0</div>
+              <div class="summary-label">Healthchecks</div>
             </div>
           </div>
         </section>
