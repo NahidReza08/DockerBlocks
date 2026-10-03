@@ -2,233 +2,488 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="./logo_se.png" />
-    <title>Blockly Workspace</title>
+    <title>Docker-Blocks | Visual Docker Compose Generator</title>
     <style>
       :root {
-        --bg-color: #f4f6f8;
-        --card-bg: #ffffff;
-        --border-color: #e2e8f0;
-        --text-main: #1e293b;
-        --text-muted: #64748b;
-        --primary: #3b82f6;
-        --radius: 12px;
-        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+        --bg: #eaf6ff;
+        --panel: #ffffff;
+        --panel-soft: #f8fbff;
+        --border: #d7e7f5;
+        --text: #06184a;
+        --muted: #526b8e;
+        --blue: #1087f5;
+        --blue-deep: #075dc4;
+        --green: #10a86a;
+        --purple: #7047d8;
+        --orange: #f97316;
+        --red: #ef334e;
+        --radius: 8px;
+        --shadow: 0 10px 28px rgba(15, 75, 120, 0.12);
       }
 
-      * {
-        box-sizing: border-box;
+      * { box-sizing: border-box; }
+
+      html, body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
       }
 
       body {
+        min-height: 100vh;
+        background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(234,246,255,0.96)), var(--bg);
+        color: var(--text);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        background-color: var(--bg-color);
-        color: var(--text-main);
-        margin: 0;
-        padding: 24px;
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
       }
 
-      header {
-        margin-bottom: 20px;
-      }
-
-      h2 {
-        margin: 0;
-        font-size: 22px;
+      button {
+        border: 0;
+        border-radius: var(--radius);
+        cursor: pointer;
+        font: inherit;
         font-weight: 700;
-        color: var(--text-main);
-        letter-spacing: -0.025em;
       }
 
-      .app-container {
+      button:focus-visible {
+        outline: 3px solid rgba(16, 135, 245, 0.36);
+        outline-offset: 2px;
+      }
+
+      .app-shell {
+        min-height: 100vh;
         display: grid;
-        grid-template-columns: 1fr 420px;
-        gap: 20px;
-        flex: 1;
-        min-height: 0; /* Prevents grid blowout */
+        grid-template-rows: auto minmax(520px, 1fr) auto;
+        gap: 12px;
+        padding: 14px;
       }
 
-      .card {
-        background: var(--card-bg);
-        border: 1px solid var(--border-color);
+      .app-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 12px 18px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(215, 231, 245, 0.9);
+        border-radius: 0 0 14px 14px;
+        box-shadow: var(--shadow);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 260px;
+      }
+
+      .brand-mark {
+        width: 74px;
+        height: 44px;
+        position: relative;
+        flex: 0 0 auto;
+      }
+
+      .brand-mark::before {
+        content: "";
+        position: absolute;
+        left: 4px;
+        bottom: 3px;
+        width: 58px;
+        height: 26px;
+        background: var(--blue);
+        border-radius: 5px 5px 24px 24px;
+      }
+
+      .brand-mark::after {
+        content: "";
+        position: absolute;
+        left: 12px;
+        top: 3px;
+        width: 9px;
+        height: 9px;
+        background: var(--blue);
+        box-shadow:
+          11px 0 0 var(--blue), 22px 0 0 var(--blue), 33px 0 0 var(--blue),
+          11px 11px 0 var(--blue), 22px 11px 0 var(--blue), 33px 11px 0 var(--blue),
+          44px 20px 0 var(--blue);
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: clamp(28px, 2.3vw, 40px);
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .brand p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 18px;
+        font-weight: 650;
+      }
+
+      .top-actions, .yaml-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .action-button {
+        min-height: 46px;
+        padding: 0 18px;
+        color: #ffffff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        box-shadow: 0 8px 18px rgba(15, 75, 120, 0.16);
+        transition: transform 120ms ease, filter 120ms ease;
+      }
+
+      .action-button:hover { filter: brightness(1.04); transform: translateY(-1px); }
+      .action-button:active { transform: translateY(0); }
+      .action-button.primary { background: var(--blue); }
+      .action-button.success { background: var(--green); }
+      .action-button.danger { background: var(--red); }
+      .action-button.secondary { background: var(--purple); }
+      .action-button.accent { background: var(--orange); }
+
+      .main-grid {
+        display: grid;
+        grid-template-columns: minmax(560px, 1fr) minmax(360px, 31vw);
+        gap: 12px;
+        min-height: 0;
+      }
+
+      .panel {
+        background: rgba(255, 255, 255, 0.94);
+        border: 1px solid var(--border);
         border-radius: var(--radius);
         box-shadow: var(--shadow);
         display: flex;
         flex-direction: column;
+        min-height: 0;
         overflow: hidden;
       }
 
-      .card-header {
-        padding: 12px 16px;
-        font-size: 13px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        background: #f8fafc;
-        border-bottom: 1px solid var(--border-color);
-        color: var(--text-muted);
-      }
-
-      /* Blockly Workspace Container */
-      .code-actions {
+      .panel-header {
+        min-height: 48px;
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        padding: 12px 16px;
-        border-bottom: 1px solid var(--border-color);
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, #ffffff, var(--panel-soft));
       }
 
-      .code-actions button {
-        padding: 7px 10px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        background: var(--card-bg);
-        color: var(--text-main);
-        font: inherit;
-        font-size: 13px;
-        cursor: pointer;
+      .panel-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--text);
       }
 
-      .code-actions button:hover { background: #eff6ff; }
-      .code-actions button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-
-      #actionStatus {
-        padding: 0 16px;
-        color: var(--text-muted);
-        font-size: 13px;
+      .panel-icon {
+        color: var(--blue);
+        font-size: 22px;
       }
 
-      #actionStatus:not(:empty) { padding: 8px 16px; }
+      .workspace-panel { position: relative; }
 
       #blocklyDiv {
         flex: 1;
         width: 100%;
-        height: 100%;
+        min-height: 520px;
+        background: #ffffff;
       }
 
-      /* Right Sidebar Layout */
-      .sidebar {
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        min-height: 0;
-      }
-
-      .output-pane {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-      }
-
-      #codeOutput, #errorOutput {
-        flex: 1;
-        padding: 16px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      .workspace-hint {
+        position: absolute;
+        left: 292px;
+        bottom: 18px;
+        padding: 8px 10px;
+        border: 1px solid rgba(16, 135, 245, 0.16);
+        border-radius: var(--radius);
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.86);
         font-size: 13px;
-        line-height: 1.5;
-        overflow-y: auto;
-        margin: 0;
+        pointer-events: none;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: var(--radius);
+        padding: 7px 10px;
+        font-weight: 800;
+        background: #e7f8f0;
+        color: #087346;
+      }
+
+      .status-pill.invalid { background: #fff0f2; color: #b4233a; }
+      .status-pill.neutral { background: #eef5ff; color: var(--blue-deep); }
+
+      .yaml-body {
+        flex: 1;
+        min-height: 0;
       }
 
       #codeOutput {
-        background: #0f172a;
-        color: #38bdf8;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        margin: 0;
+        padding: 16px 18px;
+        overflow: auto;
+        color: #005eea;
+        background: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 14px;
+        line-height: 1.55;
+        white-space: pre;
+      }
+
+      #codeOutput:empty::before {
+        content: "Your generated docker-compose.yml will appear here.";
+        color: var(--muted);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+
+      .yaml-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px;
+        border-top: 1px solid var(--border);
+        background: var(--panel-soft);
+      }
+
+      #actionStatus {
+        min-height: 18px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .bottom-grid {
+        display: grid;
+        grid-template-columns: minmax(420px, 1fr) minmax(360px, 0.95fr);
+        gap: 12px;
       }
 
       #errorOutput {
-        display: flex;
-        flex-direction: column;
+        min-height: 116px;
+        padding: 12px 14px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 18px;
+        overflow: auto;
+      }
+
+      .validation-status, .validation-empty {
+        grid-column: 1 / -1;
+        color: var(--muted);
+        font-weight: 650;
+      }
+
+      .validation-check, .validation-error {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
         gap: 10px;
-        background: #f8fafc;
-        color: var(--text-main);
-        border-top: 1px solid var(--border-color);
+        padding: 8px 10px;
+        border-radius: var(--radius);
       }
 
-      .validation-status {
-        color: #64748b;
-        font-weight: 500;
+      .validation-check { background: #f5fbff; }
+      .validation-error { background: #fff3f4; border: 1px solid #ffd0d7; }
+
+      .validation-mark {
+        width: 24px;
+        height: 24px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        background: var(--green);
+        font-weight: 900;
       }
 
-      .validation-error {
-        padding: 12px;
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        border-radius: 8px;
+      .validation-error .validation-mark { background: var(--red); }
+
+      .validation-error-title, .validation-check-title {
+        color: var(--text);
+        font-weight: 800;
+        line-height: 1.2;
       }
 
-      .validation-error-title {
-        margin-bottom: 4px;
-        color: #b91c1c;
-        font-weight: 700;
-      }
-
-      .validation-error-message {
-        color: #7f1d1d;
-        white-space: pre-wrap;
+      .validation-error-message, .validation-check-message, .validation-error-location {
+        color: var(--muted);
+        line-height: 1.25;
         overflow-wrap: anywhere;
       }
 
-      .validation-error-location {
-        margin-top: 6px;
-        color: #991b1b;
-        font-size: 12px;
+      .validation-error-message { color: #8f1f31; }
+
+      .summary-grid {
+        padding: 12px 14px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
       }
 
-      /* Responsive layout for smaller screens */
-      @media (max-width: 1024px) {
-        .app-container {
-          grid-template-columns: 1fr;
-          height: auto;
-        }
-        body {
-          height: auto;
-        }
-        #blocklyDiv {
-          height: 500px;
-        }
-        .sidebar {
-          height: 500px;
-        }
+      .summary-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 14px;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        background: linear-gradient(135deg, #f6fbff, #ffffff);
+      }
+
+      .summary-card:nth-child(2) { background: linear-gradient(135deg, #f8f3ff, #ffffff); }
+      .summary-card:nth-child(3) { background: linear-gradient(135deg, #effcf6, #ffffff); }
+      .summary-card:nth-child(4) { background: linear-gradient(135deg, #fff7ed, #ffffff); }
+
+      .summary-icon { color: var(--blue); font-size: 28px; }
+      .summary-card:nth-child(2) .summary-icon { color: var(--purple); }
+      .summary-card:nth-child(3) .summary-icon { color: var(--green); }
+      .summary-card:nth-child(4) .summary-icon { color: var(--orange); }
+
+      .summary-count {
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 900;
+        color: var(--text);
+      }
+
+      .summary-label {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .blocklyToolboxDiv {
+        background: #f8fbff;
+        border-right: 1px solid var(--border);
+      }
+
+      .blocklyTreeRow {
+        border-radius: 6px;
+        margin: 4px 8px;
+        min-height: 34px;
+      }
+
+      .blocklyTreeLabel {
+        color: var(--text);
+        font-weight: 750;
+      }
+
+      @media (max-width: 1180px) {
+        .app-shell { grid-template-rows: auto minmax(480px, 1fr) auto; }
+        .main-grid, .bottom-grid { grid-template-columns: 1fr; }
+        .yaml-panel { min-height: 420px; }
+        .workspace-hint { display: none; }
+      }
+
+      @media (max-width: 760px) {
+        .app-shell { padding: 8px; }
+        .app-header { align-items: flex-start; flex-direction: column; }
+        .top-actions, .yaml-actions { width: 100%; }
+        .action-button { flex: 1 1 160px; }
+        .summary-grid, #errorOutput { grid-template-columns: 1fr; }
       }
     </style>
   </head>
   <body>
-    <header>
-      <h2>Blockly Visual Language Environment</h2>
-    </header>
-
-    <div class="app-container">
-      <!-- Left Column: Blockly Workspace -->
-      <div class="card">
-        <div id="blocklyDiv"></div>
-      </div>
-
-      <!-- Right Column: Code & Errors stacked -->
-      <div class="sidebar">
-        <div class="card output-pane">
-          <div class="card-header">Generated Code</div>
-          <div class="code-actions" role="group" aria-label="Workspace and YAML actions">
-            <button id="loadExample" type="button">Load Example</button>
-            <button id="clearWorkspace" type="button">Clear</button>
-            <button id="copyYaml" type="button">Copy YAML</button>
-            <button id="downloadYaml" type="button">Download YAML</button>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand" aria-label="Docker-Blocks">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div>
+            <h1>Docker-Blocks</h1>
+            <p>Visual Docker Compose Generator</p>
           </div>
-          <div id="actionStatus" role="status" aria-live="polite"></div>
-          <pre id="codeOutput">// Code will appear here...</pre>
         </div>
+        <div class="top-actions" role="group" aria-label="Workspace actions">
+          <button id="loadExample" class="action-button primary" type="button">▣ Load Example</button>
+          <button id="validateWorkspace" class="action-button success" type="button">✓ Validate</button>
+          <button id="clearWorkspace" class="action-button danger" type="button">⌫ Clear</button>
+        </div>
+      </header>
 
-        <div class="card output-pane" style="flex: 0.8;">
-          <div class="card-header">Console Errors</div>
-          <div id="errorOutput">No errors detected.</div>
-        </div>
-      </div>
+      <main class="main-grid">
+        <section class="panel workspace-panel" aria-label="Blockly Workspace">
+          <div class="panel-header">
+            <div class="panel-title"><span class="panel-icon" aria-hidden="true">▣</span> Blockly Workspace</div>
+          </div>
+          <div id="blocklyDiv"></div>
+          <div class="workspace-hint">Drag Docker Compose blocks from the toolbox or load the example.</div>
+        </section>
+
+        <section class="panel yaml-panel" aria-label="Generated docker-compose YAML">
+          <div class="panel-header">
+            <div class="panel-title"><span class="panel-icon" aria-hidden="true">▤</span> docker-compose.yml</div>
+            <div id="yamlStatus" class="status-pill neutral" aria-live="polite">Waiting for blocks</div>
+          </div>
+          <div class="yaml-body">
+            <pre id="codeOutput" aria-label="Generated docker-compose.yml"></pre>
+          </div>
+          <div class="yaml-footer">
+            <div id="actionStatus" role="status" aria-live="polite"></div>
+            <div class="yaml-actions" role="group" aria-label="YAML actions">
+              <button id="copyYaml" class="action-button secondary" type="button">⧉ Copy YAML</button>
+              <button id="downloadYaml" class="action-button accent" type="button">⇩ Download YAML</button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <section class="bottom-grid">
+        <section class="panel" aria-label="Validation Results">
+          <div class="panel-header">
+            <div class="panel-title"><span class="panel-icon" aria-hidden="true">✓</span> Validation Results</div>
+          </div>
+          <div id="errorOutput"></div>
+        </section>
+
+        <section class="panel" aria-label="Workspace Summary">
+          <div class="panel-header">
+            <div class="panel-title"><span class="panel-icon" aria-hidden="true">▥</span> Workspace Summary</div>
+          </div>
+          <div class="summary-grid">
+            <div class="summary-card">
+              <div class="summary-icon" aria-hidden="true">▣</div>
+              <div><div id="summaryServices" class="summary-count">0</div><div class="summary-label">Services</div></div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon" aria-hidden="true">⌘</div>
+              <div><div id="summaryNetworks" class="summary-count">0</div><div class="summary-label">Networks</div></div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon" aria-hidden="true">↔</div>
+              <div><div id="summaryDependencies" class="summary-count">0</div><div class="summary-label">Dependencies</div></div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon" aria-hidden="true">♡</div>
+              <div><div id="summaryHealthchecks" class="summary-count">0</div><div class="summary-label">Healthchecks</div></div>
+            </div>
+          </div>
+        </section>
+      </section>
     </div>
-    
-    <!-- Load our TypeScript file -->
+
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

@@ -20,17 +20,94 @@ export function bootstrapBlocklyApp({
   generator,
   validationErrors
 }: BootstrapOptions) {
-  const workspace = Blockly.inject('blocklyDiv', { toolbox });
+  const workspace = Blockly.inject('blocklyDiv', {
+    toolbox,
+    grid: {
+      spacing: 20,
+      length: 2,
+      colour: '#cfe3f5',
+      snap: false
+    },
+    zoom: {
+      controls: true,
+      wheel: true,
+      startScale: 0.92,
+      maxScale: 1.6,
+      minScale: 0.45,
+      scaleSpeed: 1.08
+    },
+    trashcan: true
+  });
   const codeOutput = document.getElementById('codeOutput');
   const errorOutput = document.getElementById('errorOutput');
   const actionStatus = document.getElementById('actionStatus');
+  const yamlStatus = document.getElementById('yamlStatus');
   const validationUi = createValidationUi(workspace, errorOutput);
+  const summaryElements = {
+    service: document.getElementById('summaryServices'),
+    network: document.getElementById('summaryNetworks'),
+    dependency: document.getElementById('summaryDependencies'),
+    healthcheck: document.getElementById('summaryHealthchecks')
+  };
 
   function collectValidationErrors() {
     return [
       ...validationErrors,
       ...collectDockerValidationErrors(workspace)
     ];
+  }
+
+  function workspaceHasBlocks() {
+    return workspace.getAllBlocks(false).length > 0;
+  }
+
+  function updateYamlStatus(errors: UiValidationError[], code: string) {
+    if (!yamlStatus) return;
+
+    yamlStatus.classList.remove('invalid', 'neutral');
+
+    if (!code.trim() || !workspaceHasBlocks()) {
+      yamlStatus.textContent = 'Waiting for blocks';
+      yamlStatus.classList.add('neutral');
+      return;
+    }
+
+    if (errors.length > 0) {
+      yamlStatus.textContent = 'Validation errors';
+      yamlStatus.classList.add('invalid');
+      return;
+    }
+
+    yamlStatus.textContent = 'Valid YAML';
+  }
+
+  function updateWorkspaceSummary() {
+    const counts = {
+      service: 0,
+      network: 0,
+      dependency: 0,
+      healthcheck: 0
+    };
+
+    workspace.getAllBlocks(false).forEach((block) => {
+      if (block.type === 'service') counts.service += 1;
+      if (block.type === 'network') counts.network += 1;
+      if (block.type === 'networkref') counts.network += 1;
+      if (block.type === 'dependency') counts.dependency += 1;
+      if (block.type === 'healthcheck') counts.healthcheck += 1;
+    });
+
+    Object.entries(summaryElements).forEach(([type, element]) => {
+      if (element) element.textContent = String(counts[type as keyof typeof counts]);
+    });
+  }
+
+  function resizeWorkspace() {
+    try {
+      Blockly.svgResize(workspace);
+    } catch {
+      // Headless tests use a minimal Blockly workspace without an SVG surface.
+    }
   }
 
   function generateCode() {
@@ -40,18 +117,20 @@ export function bootstrapBlocklyApp({
       if (codeOutput) {
         codeOutput.textContent = code;
       }
-
-      if (validationUi.currentErrors.length === 0) {
-        validationUi.showNoErrors();
-      }
+      return code;
     } catch (error) {
       validationUi.showGenerationError(error);
+      return '';
     }
   }
 
   function handleWorkspaceChange(_event?: Blockly.Events.Abstract) {
-    generateCode();
-    validationUi.refresh(collectValidationErrors());
+    const code = generateCode();
+    const errors = collectValidationErrors();
+    validationUi.refresh(errors);
+    updateYamlStatus(errors, code);
+    updateWorkspaceSummary();
+    resizeWorkspace();
   }
 
   function showActionStatus(message: string) {
@@ -68,6 +147,15 @@ export function bootstrapBlocklyApp({
     loadDockerComposeExample(workspace);
     handleWorkspaceChange();
     showActionStatus('Example loaded.');
+  }
+
+  function validateWorkspace() {
+    handleWorkspaceChange();
+    showActionStatus(
+      validationUi.currentErrors.length === 0
+        ? 'Workspace validation passed.'
+        : 'Validation errors found.'
+    );
   }
 
   async function copyYaml() {
@@ -101,11 +189,15 @@ export function bootstrapBlocklyApp({
   workspace.addChangeListener(handleWorkspaceChange);
 
   document.getElementById('loadExample')?.addEventListener('click', loadExample);
+  document.getElementById('validateWorkspace')?.addEventListener('click', validateWorkspace);
   document.getElementById('clearWorkspace')?.addEventListener('click', clearWorkspace);
   document.getElementById('copyYaml')?.addEventListener('click', copyYaml);
   document.getElementById('downloadYaml')?.addEventListener('click', downloadYaml);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', resizeWorkspace);
+  }
 
-  generateCode();
+  handleWorkspaceChange();
 
   return {
     workspace,
