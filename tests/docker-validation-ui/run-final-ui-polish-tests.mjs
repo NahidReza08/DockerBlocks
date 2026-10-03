@@ -29,6 +29,8 @@ function element() {
   return {
     textContent: '', children: [], listeners: {},
     className: '',
+    value: '',
+    title: '',
     classList: {
       values: new Set(),
       add(...names) { names.forEach(name => this.values.add(name)); },
@@ -59,7 +61,7 @@ function validationMessages() {
 const ids = [
   'codeOutput', 'errorOutput', 'actionStatus', 'yamlStatus',
   'summaryServices', 'summaryNetworks', 'summaryDependencies', 'summaryHealthchecks',
-  'loadExample', 'validateWorkspace', 'clearWorkspace', 'copyYaml', 'downloadYaml'
+  'exampleSelect', 'loadExample', 'validateWorkspace', 'clearWorkspace', 'copyYaml', 'downloadYaml'
 ];
 const elements = Object.fromEntries(ids.map(id => [id, element()]));
 const workspace = new Blockly.Workspace();
@@ -106,7 +108,46 @@ try {
   execute(read('blockly_app/src/blocks.ts'), context);
   execute(read('blockly_app/src/generator.ts'), context);
   execute(main.replace('bootstrapBlocklyApp({', 'globalThis.app = bootstrapBlocklyApp({'), context);
-  const expected = read('tests/docker-compose-examples/D04-valid-multi-service.yaml');
+  const simpleExpected = [
+    'services:',
+    '  web:',
+    '    image: nginx:latest',
+    '    restart: unless-stopped',
+    '    ports:',
+    '      - "8080:80"',
+    ''
+  ].join('\n');
+  const multiExpectedSections = [
+    '  web:',
+    '    image: docker-blocks-demo-web:latest',
+    '    build: .',
+    '    restart: unless-stopped',
+    '    healthcheck:',
+    '      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]',
+    '    depends_on:',
+    '      - database',
+    '    networks:',
+    '      - backend',
+    '    ports:',
+    '      - "8080:80"',
+    '    environment:',
+    '      APP_ENV: production',
+    '      DATABASE_HOST: database',
+    '  database:',
+    '    image: postgres:latest',
+    '      POSTGRES_PASSWORD: example',
+    '    volumes:',
+    '      - "./data:/var/lib/postgresql/data"',
+    'networks:',
+    '  backend:',
+    '    driver: bridge'
+  ];
+  assert.deepEqual(
+    elements.exampleSelect.children.map(option => option.textContent),
+    ['Simple Web Service', 'Multi-Service Application'],
+    'Example selector exposes the polished demo examples'
+  );
+  assert.equal(elements.exampleSelect.value, 'simple-web-service');
   assert.equal(elements.codeOutput.textContent, '', 'Initial output is empty YAML');
   assert.equal(elements.yamlStatus.textContent, 'Waiting for blocks');
   assert.equal(elements.summaryServices.textContent, '0');
@@ -234,17 +275,34 @@ try {
   clean();
   for (let i = 0; i < 2; i++) {
     click('loadExample');
-    assert.equal(elements.codeOutput.textContent, expected, 'Load Example generates exact D04 YAML');
-    assert.equal(workspace.getAllBlocks(false).length, 10, 'Reload replaces blocks');
-    assert.equal(elements.summaryServices.textContent, '2');
+    assert.equal(elements.actionStatus.textContent, 'Simple Web Service loaded.');
+    assert.equal(elements.codeOutput.textContent, simpleExpected, 'Load Example generates exact simple YAML');
+    assert.equal(workspace.getAllBlocks(false).length, 4, 'Reload replaces blocks with compact simple example');
+    assert.equal(elements.summaryServices.textContent, '1');
+    assert.equal(elements.summaryNetworks.textContent, '0');
     assert.equal(elements.summaryDependencies.textContent, '0');
     assert.equal(elements.summaryHealthchecks.textContent, '0');
     assert.equal(elements.yamlStatus.textContent, 'Valid YAML');
     clean();
   }
+  elements.exampleSelect.value = 'multi-service-application';
+  click('loadExample');
+  assert.equal(elements.actionStatus.textContent, 'Multi-Service Application loaded.');
+  assert.equal(elements.summaryServices.textContent, '2');
+  assert.equal(elements.summaryNetworks.textContent, '1');
+  assert.equal(elements.summaryDependencies.textContent, '1');
+  assert.equal(elements.summaryHealthchecks.textContent, '1');
+  assert.equal(elements.yamlStatus.textContent, 'Valid YAML');
+  for (const expectedSection of multiExpectedSections) {
+    assert.ok(
+      elements.codeOutput.textContent.includes(expectedSection),
+      `Multi-service example YAML should include: ${expectedSection}`
+    );
+  }
+  clean();
   click('validateWorkspace');
   assert.equal(elements.actionStatus.textContent, 'Workspace validation passed.');
-  for (const yaml of [expected, '']) {
+  for (const yaml of [elements.codeOutput.textContent, '']) {
     if (!yaml) click('clearWorkspace');
     await click('copyYaml');
     assert.equal(copied, yaml, 'Copy preserves all YAML content');
@@ -265,7 +323,7 @@ try {
   assert.match(elements.actionStatus.textContent, /copy it manually/);
   clean();
   const html = read('blockly_app/index.html');
-  for (const [id, label] of [['loadExample', 'Load Example'], ['validateWorkspace', 'Validate'], ['clearWorkspace', 'Clear'],
+  for (const [id, label] of [['exampleSelect', 'Example'], ['loadExample', 'Load Example'], ['validateWorkspace', 'Validate'], ['clearWorkspace', 'Clear'],
     ['copyYaml', 'Copy YAML'], ['downloadYaml', 'Download YAML']]) {
     assert.ok(html.includes(`id="${id}"`));
     assert.ok(html.includes(label));
@@ -276,7 +334,7 @@ try {
   assert.ok(html.includes('Visual Docker Compose Generator'));
   assert.ok(html.includes('docker-compose.yml'));
   assert.ok(html.includes('Workspace Summary'));
-  console.log('[PASS] Final UI actions: D04 YAML, clear/validation, copy success/failure, download content/cleanup, runtime/template parity');
+  console.log('[PASS] Final UI actions: example selector, YAML refresh, clear/validation, copy success/failure, download content/cleanup, runtime/template parity');
 } finally {
   workspace.dispose();
 }

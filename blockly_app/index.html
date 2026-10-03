@@ -131,6 +131,34 @@
         flex-wrap: wrap;
       }
 
+      .example-picker {
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #ffffff;
+        color: var(--muted);
+        font-weight: 750;
+        box-shadow: 0 8px 18px rgba(15, 75, 120, 0.08);
+      }
+
+      .example-picker select {
+        min-width: 210px;
+        border: 0;
+        color: var(--text);
+        background: transparent;
+        font: inherit;
+        font-weight: 750;
+      }
+
+      .example-picker select:focus-visible {
+        outline: 3px solid rgba(16, 135, 245, 0.28);
+        outline-offset: 3px;
+      }
+
       .action-button {
         min-height: 46px;
         padding: 0 18px;
@@ -401,6 +429,8 @@
         .app-shell { padding: 8px; }
         .app-header { align-items: flex-start; flex-direction: column; }
         .top-actions, .yaml-actions { width: 100%; }
+        .example-picker { width: 100%; }
+        .example-picker select { min-width: 0; flex: 1; }
         .action-button { flex: 1 1 160px; }
         .summary-grid, #errorOutput { grid-template-columns: 1fr; }
       }
@@ -417,6 +447,10 @@
           </div>
         </div>
         <div class="top-actions" role="group" aria-label="Workspace actions">
+          <label class="example-picker">
+            <span>Example</span>
+            <select id="exampleSelect" aria-label="Choose example"></select>
+          </label>
           <button id="loadExample" class="action-button primary" type="button">▣ Load Example</button>
           <button id="validateWorkspace" class="action-button success" type="button">✓ Validate</button>
           <button id="clearWorkspace" class="action-button danger" type="button">⌫ Clear</button>

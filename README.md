@@ -39,7 +39,9 @@ For the checked-in DockerBlocks editor, run `npm.cmd install` and
 `npm.cmd run dev` from the repository root (use `npm` instead of `npm.cmd`
 outside Windows). Open the printed local URL and build a configuration from
 the Docker toolbox. The output panel updates with Compose YAML.
-Start with the [D04 multi-service demo](tests/docker-compose-examples/README.md#multi-service-demo-d04).
+Start with the built-in **Simple Web Service** example, then switch to
+**Multi-Service Application** from the example selector to demonstrate the
+larger supported Compose subset.
 
 The following commands demonstrate generating an editor for a different grammar
 and overwrite the checked-in Docker editor:
@@ -125,6 +127,24 @@ Docker duration grammar, long-form build properties such as args, target, cache,
 platforms, pull/no-cache, secrets, ssh, labels, network, and commands. Volume
 validation checks only nonblank fields; it does not verify paths or implement
 mount options.
+
+## Built-in examples
+
+The browser UI includes two presentation-ready examples in the header example
+selector:
+
+- **Simple Web Service** demonstrates the beginner flow: Compose -> Service ->
+  image -> port -> generated YAML. It creates one `web` service using
+  `nginx:latest`, maps `8080:80`, and sets `restart: unless-stopped`.
+- **Multi-Service Application** demonstrates a richer two-service setup with a
+  `web` service and `database` service. It covers image, short-form build,
+  ports, environment entries, volume mapping, `depends_on`, a top-level
+  `backend` network plus service network references, restart policy, and a
+  healthcheck.
+
+The examples are demo workspaces only. Docker-Blocks generates Compose YAML; it
+does not create Dockerfiles, application source code, secrets, or run
+`docker compose up`.
 
 ## Run and verify
 

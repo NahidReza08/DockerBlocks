@@ -1,7 +1,10 @@
 import * as Blockly from 'blockly';
 
 import type { UiValidationError } from './app-types';
-import { loadDockerComposeExample } from './docker-example';
+import {
+  DOCKER_COMPOSE_EXAMPLES,
+  loadDockerComposeExample
+} from './docker-example';
 import { collectDockerValidationErrors } from './docker-validation';
 import { createValidationUi } from './validation-ui';
 
@@ -42,6 +45,7 @@ export function bootstrapBlocklyApp({
   const errorOutput = document.getElementById('errorOutput');
   const actionStatus = document.getElementById('actionStatus');
   const yamlStatus = document.getElementById('yamlStatus');
+  const exampleSelect = document.getElementById('exampleSelect') as HTMLSelectElement | null;
   const validationUi = createValidationUi(workspace, errorOutput);
   const summaryElements = {
     service: document.getElementById('summaryServices'),
@@ -92,7 +96,6 @@ export function bootstrapBlocklyApp({
     workspace.getAllBlocks(false).forEach((block) => {
       if (block.type === 'service') counts.service += 1;
       if (block.type === 'network') counts.network += 1;
-      if (block.type === 'networkref') counts.network += 1;
       if (block.type === 'dependency') counts.dependency += 1;
       if (block.type === 'healthcheck') counts.healthcheck += 1;
     });
@@ -137,6 +140,22 @@ export function bootstrapBlocklyApp({
     if (actionStatus) actionStatus.textContent = message;
   }
 
+  function populateExampleSelector() {
+    if (!exampleSelect) return;
+
+    exampleSelect.replaceChildren();
+
+    DOCKER_COMPOSE_EXAMPLES.forEach((example) => {
+      const option = document.createElement('option');
+      option.value = example.id;
+      option.textContent = example.name;
+      option.title = example.description;
+      exampleSelect.appendChild(option);
+    });
+
+    exampleSelect.value = DOCKER_COMPOSE_EXAMPLES[0].id;
+  }
+
   function clearWorkspace() {
     workspace.clear();
     handleWorkspaceChange();
@@ -144,9 +163,12 @@ export function bootstrapBlocklyApp({
   }
 
   function loadExample() {
-    loadDockerComposeExample(workspace);
+    const selectedExample = loadDockerComposeExample(
+      workspace,
+      exampleSelect?.value
+    );
     handleWorkspaceChange();
-    showActionStatus('Example loaded.');
+    showActionStatus(selectedExample.name + ' loaded.');
   }
 
   function validateWorkspace() {
@@ -185,6 +207,7 @@ export function bootstrapBlocklyApp({
     }
   }
 
+  populateExampleSelector();
   validationUi.refresh(collectValidationErrors());
   workspace.addChangeListener(handleWorkspaceChange);
 
