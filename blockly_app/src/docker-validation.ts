@@ -38,6 +38,17 @@ function validatePort(
   }
 }
 
+function getOwningServiceBlock(block: Blockly.Block): Blockly.Block | null {
+  let current = block.getSurroundParent();
+
+  while (current) {
+    if (current.type === 'service') return current;
+    current = current.getSurroundParent();
+  }
+
+  return null;
+}
+
 export function collectDockerValidationErrors(
   workspace: Blockly.Workspace
 ): UiValidationError[] {
@@ -114,6 +125,32 @@ export function collectDockerValidationErrors(
     blocks.forEach((block) => {
       errors.push(requiredError(`Duplicate service name "${name}".`, block.id));
     });
+  });
+
+  workspace.getAllBlocks(false).forEach((block) => {
+    if (block.type !== 'dependency') return;
+
+    const rawTarget = String(block.getFieldValue('TARGET') ?? '');
+    const target = trimFieldValue(rawTarget);
+
+    if (target.length === 0) {
+      errors.push(requiredError('Dependency service name is required.', block.id));
+      return;
+    }
+
+    const owningService = getOwningServiceBlock(block);
+    const owningServiceName = owningService
+      ? String(owningService.getFieldValue('NAME') ?? '')
+      : '';
+
+    if (owningServiceName === rawTarget) {
+      errors.push(requiredError(`Service "${rawTarget}" cannot depend on itself.`, block.id));
+      return;
+    }
+
+    if (!serviceBlocksByName.has(rawTarget)) {
+      errors.push(requiredError(`Unknown dependency service "${rawTarget}".`, block.id));
+    }
   });
 
   return errors;

@@ -120,6 +120,23 @@ try {
   clean();
   assert.equal(duplicateA.lastValidationWarning, null);
   assert.equal(duplicateB.lastValidationWarning, null);
+  const dependency = workspace.newBlock('dependency');
+  dependency.setFieldValue('missing-service', 'TARGET');
+  duplicateA.getInput('DEPENDS_ON').connection.connect(dependency.previousConnection);
+  dependency.lastValidationWarning = undefined;
+  dependency.setWarningText = (text, id) => {
+    if (id === 'captured-validation-error') {
+      dependency.lastValidationWarning = text;
+    }
+  };
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  assert.equal(elements.errorOutput.children.length, 1, 'Dependency validation renders one error');
+  assert.equal(elements.errorOutput.children[0].children[1].textContent, 'Unknown dependency service "missing-service".');
+  assert.equal(dependency.lastValidationWarning, 'Unknown dependency service "missing-service".');
+  dependency.setFieldValue('api', 'TARGET');
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  clean();
+  assert.equal(dependency.lastValidationWarning, null);
   click('clearWorkspace');
   clean();
   for (let i = 0; i < 2; i++) {

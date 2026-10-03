@@ -340,6 +340,110 @@ async function testComposeYamlGeneration() {
     console.log('✓ backend service generated');
     console.log('✓ node image generated');
 
+    console.log('Testing Docker Compose depends_on grammar and YAML...');
+
+    const oneDependencyDsl =
+      'compose {\n' +
+      '  service web {\n' +
+      '    image nginx\n' +
+      '    depends_on db\n' +
+      '  }\n' +
+      '  service db {\n' +
+      '    image postgres\n' +
+      '  }\n' +
+      '}\n';
+    const grammarServices = await createServicesForGrammar({ grammar });
+    const oneDependencyParse = grammarServices.parser.LangiumParser.parse(oneDependencyDsl);
+    assert.deepEqual(oneDependencyParse.lexerErrors, [], 'One dependency example should have no lexer errors');
+    assert.deepEqual(oneDependencyParse.parserErrors, [], 'One dependency example should parse');
+
+    const multiDependencyDsl =
+      'compose {\n' +
+      '  service web {\n' +
+      '    image nginx\n' +
+      '    depends_on db\n' +
+      '    depends_on cache\n' +
+      '  }\n' +
+      '  service db {\n' +
+      '    image postgres\n' +
+      '  }\n' +
+      '  service cache {\n' +
+      '    image redis\n' +
+      '  }\n' +
+      '}\n';
+    const multiDependencyParse = grammarServices.parser.LangiumParser.parse(multiDependencyDsl);
+    assert.deepEqual(multiDependencyParse.lexerErrors, [], 'Multiple dependency example should have no lexer errors');
+    assert.deepEqual(multiDependencyParse.parserErrors, [], 'Multiple dependency example should parse');
+
+    const dependencyBlockDefinition = blockDefinitions.find((block) => block.type === 'dependency');
+    assert.ok(dependencyBlockDefinition, 'Generated blocks should include dependency');
+    assert.equal(
+      dependencyBlockDefinition.previousStatement,
+      'dependency',
+      'Dependency block should be stackable only with dependency blocks'
+    );
+
+    const dependsWorkspace = new Blockly.Workspace();
+    try {
+      const dependsCompose = dependsWorkspace.newBlock('compose');
+      const web = dependsWorkspace.newBlock('service');
+      const db = dependsWorkspace.newBlock('service');
+      web.setFieldValue('web', 'NAME');
+      web.setFieldValue('nginx', 'IMAGE');
+      db.setFieldValue('db', 'NAME');
+      db.setFieldValue('postgres', 'IMAGE');
+      dependsCompose.getInput('SERVICES').connection.connect(web.previousConnection);
+      web.nextConnection.connect(db.previousConnection);
+      const dependency = dependsWorkspace.newBlock('dependency');
+      dependency.setFieldValue('db', 'TARGET');
+      web.getInput('DEPENDS_ON').connection.connect(dependency.previousConnection);
+      const dependsYaml = generator.workspaceToCode(dependsWorkspace);
+      assert.equal(
+        dependsYaml,
+        'services:\n' +
+        '  web:\n' +
+        '    image: nginx\n' +
+        '    depends_on:\n' +
+        '      - db\n' +
+        '  db:\n' +
+        '    image: postgres\n',
+        'One Docker dependency should generate short depends_on syntax.'
+      );
+      assert.deepEqual(parse(dependsYaml), {
+        services: {
+          web: { image: 'nginx', depends_on: ['db'] },
+          db: { image: 'postgres' }
+        }
+      });
+
+      const cache = dependsWorkspace.newBlock('service');
+      cache.setFieldValue('cache', 'NAME');
+      cache.setFieldValue('redis', 'IMAGE');
+      db.nextConnection.connect(cache.previousConnection);
+      const cacheDependency = dependsWorkspace.newBlock('dependency');
+      cacheDependency.setFieldValue('cache', 'TARGET');
+      dependency.nextConnection.connect(cacheDependency.previousConnection);
+      const multiDependsYaml = generator.workspaceToCode(dependsWorkspace);
+      assert.equal(
+        multiDependsYaml,
+        'services:\n' +
+        '  web:\n' +
+        '    image: nginx\n' +
+        '    depends_on:\n' +
+        '      - db\n' +
+        '      - cache\n' +
+        '  db:\n' +
+        '    image: postgres\n' +
+        '  cache:\n' +
+        '    image: redis\n',
+        'Multiple Docker dependencies should preserve stack order.'
+      );
+      assert.deepEqual(parse(multiDependsYaml).services.web.depends_on, ['db', 'cache']);
+      console.log('✓ depends_on grammar and YAML generated');
+    } finally {
+      dependsWorkspace.dispose();
+    }
+
     console.log('Testing one Docker Compose port mapping...');
 
     const onePortWorkspace = new Blockly.Workspace();

@@ -78,13 +78,14 @@ emits a YAML `services:` mapping. The text grammar requires at least one service
 
 | Block | Supported fields and validation |
 |---|---|
-| Service | Required, nonblank name and image; zero or more Port, Environment, and Volume blocks. |
+| Service | Required, nonblank name and image; zero or more Dependency, Port, Environment, and Volume blocks. Service names must be unique. |
+| Dependency | Required target service name; target must reference an existing service and must not be the owning service itself. YAML uses short `depends_on` list syntax. |
 | Port | Required host and container ports, each an integer in `1..65535`; emitted as a quoted `HOST:CONTAINER` mapping. |
 | Environment | A `KEY=VALUE` entry, entered in separate Blockly fields. Keys must match `[A-Za-z_][A-Za-z0-9_]*`: ASCII letter or underscore first, then letters, digits, or underscores. YAML uses `KEY: VALUE` mapping entries. |
 | Volume | Required, nonblank source and target; quoted `SOURCE:TARGET` short syntax only. |
 
 Blockly connection rules restrict Compose's service stack to Service blocks,
-and each Service's ports, environment, and volumes stacks to matching block types.
+and each Service's dependencies, ports, environment, and volumes stacks to matching block types.
 Validation messages appear in the error panel and as warnings on the affected
 blocks; warnings do not prevent YAML generation.
 
@@ -94,16 +95,16 @@ requires an `ID` or `INT` value. Digit-only values are quoted in YAML; other val
 are emitted as entered, so arbitrary YAML-sensitive strings are not generally escaped.
 
 The [text grammar](generate_blockly/input/docker-compose.langium) orders each
-service's image, ports, environment entries, then volumes. It uses
-`port HOST -> CONTAINER`, `environment KEY = VALUE`, and
+service's image, dependencies, ports, environment entries, then volumes. It uses
+`depends_on TARGET`, `port HOST -> CONTAINER`, `environment KEY = VALUE`, and
 `volume "SOURCE" -> "TARGET"`. Service names and images use its restricted
 `ID` token (including simple tags such as `node:20`), not the full Docker
 image-reference syntax. Blockly name/image validation only checks nonblank fields.
 
-Unsupported features include `depends_on`, `networks`, top-level named volume
-declarations, long volume syntax, `secrets`, `env_file`, `build`, commands, and
-health checks. Volume validation checks only nonblank fields; it does not verify
-paths or implement mount options.
+Unsupported features include long-form `depends_on` conditions, `networks`,
+top-level named volume declarations, long volume syntax, `secrets`, `env_file`,
+`build`, commands, and health checks. Volume validation checks only nonblank
+fields; it does not verify paths or implement mount options.
 
 ## Run and verify
 

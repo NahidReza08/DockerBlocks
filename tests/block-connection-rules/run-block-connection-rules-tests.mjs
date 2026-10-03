@@ -49,6 +49,16 @@ function extractBlockDefinitions(blocksTs) {
   );
 }
 
+function blockInputs(block) {
+  return Object.entries(block)
+    .filter(([key]) => /^args\d+$/.test(key))
+    .flatMap(([, args]) => args);
+}
+
+function findInput(block, name) {
+  return blockInputs(block).find((input) => input.name === name);
+}
+
 async function testDockerConnectionRules() {
   console.log('Testing Docker block connection rules...');
 
@@ -69,10 +79,19 @@ async function testDockerConnectionRules() {
     const service = workspace.newBlock('service');
     const first = workspace.newBlock('volume');
     const second = workspace.newBlock('volume');
+    const dependency = workspace.newBlock('dependency');
     const port = workspace.newBlock('port');
     const environment = workspace.newBlock('environment');
     const compose = workspace.newBlock('compose');
+    const dependencies = service.getInput('DEPENDS_ON');
     const volumes = service.getInput('VOLUMES');
+    assert.ok(dependencies, 'Service has DEPENDS_ON');
+    assert.deepEqual(dependencies.connection.getCheck(), ['dependency']);
+    assert.deepEqual(dependency.previousConnection.getCheck(), ['dependency']);
+    assert.deepEqual(dependency.nextConnection.getCheck(), ['dependency']);
+    dependencies.connection.connect(dependency.previousConnection);
+    assert.equal(service.getInputTargetBlock('DEPENDS_ON'), dependency);
+    console.log('[PASS] Service DEPENDS_ON accepts Dependency; Dependency stacks with dependency previous/next types');
     assert.ok(volumes, 'Service has VOLUMES');
     assert.deepEqual(volumes.connection.getCheck(), ['volume']);
     assert.deepEqual(first.previousConnection.getCheck(), ['volume']);
@@ -85,9 +104,14 @@ async function testDockerConnectionRules() {
     for (const [label, parent, child] of [
       ['Volume cannot connect to PORTS', service.getInput('PORTS').connection, first.previousConnection],
       ['Volume cannot connect to ENVIRONMENT', service.getInput('ENVIRONMENT').connection, first.previousConnection],
+      ['Dependency cannot connect to PORTS', service.getInput('PORTS').connection, dependency.previousConnection],
+      ['Dependency cannot connect to VOLUMES', volumes.connection, dependency.previousConnection],
+      ['Port cannot connect to DEPENDS_ON', dependencies.connection, port.previousConnection],
+      ['Environment cannot connect to DEPENDS_ON', dependencies.connection, environment.previousConnection],
       ['Port cannot connect to VOLUMES', volumes.connection, port.previousConnection],
       ['Environment cannot connect to VOLUMES', volumes.connection, environment.previousConnection],
-      ['Volume cannot connect to Compose SERVICES', compose.getInput('SERVICES').connection, first.previousConnection]
+      ['Volume cannot connect to Compose SERVICES', compose.getInput('SERVICES').connection, first.previousConnection],
+      ['Dependency cannot connect to Compose SERVICES', compose.getInput('SERVICES').connection, dependency.previousConnection]
     ]) {
       assert.equal(workspace.connectionChecker.doTypeChecks(parent, child), false, label);
       console.log('[PASS] ' + label);
@@ -106,6 +130,10 @@ async function testDockerConnectionRules() {
 
   const port = blocks.find(
     (block) => block.type === 'port'
+  );
+
+  const dependency = blocks.find(
+    (block) => block.type === 'dependency'
   );
 
   const environment = blocks.find(
@@ -128,6 +156,11 @@ async function testDockerConnectionRules() {
   );
 
   assert.ok(
+    dependency,
+    'Dependency block should be generated.'
+  );
+
+  assert.ok(
     environment,
     'Environment block should be generated.'
   );
@@ -144,9 +177,38 @@ async function testDockerConnectionRules() {
     'Port should stack below another Port-compatible block.'
   );
 
-  const servicePortsInput = service.args3?.find(
-    (input) => input.name === 'PORTS'
+  const serviceDependencyInput = findInput(service, 'DEPENDS_ON');
+
+  assert.ok(
+    serviceDependencyInput,
+    'Service should expose a DEPENDS_ON statement input for stackable Dependency blocks.'
   );
+
+  assert.equal(
+    serviceDependencyInput.type,
+    'input_statement',
+    'Service DEPENDS_ON input should be a Blockly statement input.'
+  );
+
+  assert.equal(
+    serviceDependencyInput.check,
+    'dependency',
+    'Service DEPENDS_ON input should only accept Dependency blocks.'
+  );
+
+  assert.equal(
+    dependency.previousStatement,
+    'dependency',
+    'Dependency should stack above another Dependency-compatible block.'
+  );
+
+  assert.equal(
+    dependency.nextStatement,
+    'dependency',
+    'Dependency should stack below another Dependency-compatible block.'
+  );
+
+  const servicePortsInput = findInput(service, 'PORTS');
 
   assert.ok(
     servicePortsInput,
@@ -165,9 +227,7 @@ async function testDockerConnectionRules() {
     'Service PORTS input should only accept Port blocks.'
   );
 
-  const serviceEnvironmentInput = service.args4?.find(
-    (input) => input.name === 'ENVIRONMENT'
-  );
+  const serviceEnvironmentInput = findInput(service, 'ENVIRONMENT');
 
   assert.ok(
     serviceEnvironmentInput,
@@ -216,13 +276,7 @@ async function testDockerConnectionRules() {
     'Compose must not accept Environment blocks directly.'
   );
 
-  const composeInputs = Object.entries(compose)
-    .filter(([key]) => /^args\d+$/.test(key))
-    .flatMap(([, args]) => args);
-
-  const servicesInput = composeInputs.find(
-    (input) => input.name === 'SERVICES'
-  );
+  const servicesInput = findInput(compose, 'SERVICES');
 
   assert.ok(
     servicesInput,

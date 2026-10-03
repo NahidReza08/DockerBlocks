@@ -405,6 +405,83 @@ try {
       );
       backend.service.setFieldValue('backend', 'NAME');
 
+      const dependency = createBlock('dependency', { TARGET: 'frontend' });
+      backend.service.getInput('DEPENDS_ON').connection.connect(dependency.previousConnection);
+      assert.deepEqual(collectWorkspace(), [], `${context}: valid dependency target validates cleanly`);
+      console.log(`[PASS] ${context}: valid dependency target validates cleanly`);
+
+      dependency.setFieldValue('missing-service', 'TARGET');
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === dependency.id),
+        [{
+          type: 'validation',
+          message: 'Unknown dependency service "missing-service".',
+          severity: 'error',
+          blockId: dependency.id
+        }],
+        `${context}: unknown dependency target attaches to the dependency block`
+      );
+      dependency.setFieldValue('frontend', 'TARGET');
+      assert.deepEqual(collectWorkspace(), [], `${context}: fixing unknown dependency clears the error`);
+      console.log(`[PASS] ${context}: unknown dependency error clears after fixing target`);
+
+      dependency.setFieldValue('backend', 'TARGET');
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === dependency.id),
+        [{
+          type: 'validation',
+          message: 'Service "backend" cannot depend on itself.',
+          severity: 'error',
+          blockId: dependency.id
+        }],
+        `${context}: self dependency attaches to the dependency block`
+      );
+      dependency.setFieldValue('frontend', 'TARGET');
+      assert.deepEqual(collectWorkspace(), [], `${context}: fixing self dependency clears the error`);
+      console.log(`[PASS] ${context}: self dependency error clears after fixing target`);
+
+      dependency.setFieldValue('', 'TARGET');
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === dependency.id),
+        [{
+          type: 'validation',
+          message: 'Dependency service name is required.',
+          severity: 'error',
+          blockId: dependency.id
+        }],
+        `${context}: blank dependency target uses the required-field validation`
+      );
+      dependency.setFieldValue('frontend', 'TARGET');
+
+      dependency.setFieldValue('cache', 'TARGET');
+      assert.equal(
+        collectWorkspace().find((error) => error.blockId === dependency.id)?.message,
+        'Unknown dependency service "cache".',
+        `${context}: dependency is invalid before referenced service is added`
+      );
+      const cache = createService('cache', 'redis', '6379', '6379', './cache', '/data');
+      backend.service.nextConnection.connect(cache.service.previousConnection);
+      assert.deepEqual(collectWorkspace(), [], `${context}: dependency becomes valid when referenced service is added`);
+      cache.service.setFieldValue('queue', 'NAME');
+      assert.equal(
+        collectWorkspace().find((error) => error.blockId === dependency.id)?.message,
+        'Unknown dependency service "cache".',
+        `${context}: dependency becomes invalid when referenced service is renamed`
+      );
+      cache.service.setFieldValue('cache', 'NAME');
+      assert.deepEqual(collectWorkspace(), [], `${context}: restoring referenced service name clears dependency error`);
+      cache.service.dispose(true);
+      assert.equal(
+        collectWorkspace().find((error) => error.blockId === dependency.id)?.message,
+        'Unknown dependency service "cache".',
+        `${context}: dependency becomes invalid when referenced service is removed`
+      );
+      dependency.setFieldValue('frontend', 'TARGET');
+      assert.deepEqual(collectWorkspace(), [], `${context}: dependency error clears after changing to existing service`);
+      console.log(`[PASS] ${context}: dependency validation responds to added, renamed and removed services`);
+      dependency.dispose(true);
+      assert.deepEqual(collectWorkspace(), [], `${context}: removing dependency block leaves existing validation clean`);
+
       const invalidFields = [
         [backend.service, 'IMAGE', '', 'node:20', 'Image is required'],
         [backend.port, 'HOST_PORT', '65536', '3000', 'Host port must be an integer between 1 and 65535.'],

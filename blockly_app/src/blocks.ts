@@ -37,24 +37,32 @@ export function defineBlocks() {
             "text": "nginx"
           }
         ],
-        "message3": "Ports: %1",
+        "message3": "Depends On: %1",
         "args3": [
+          {
+            "type": "input_statement",
+            "name": "DEPENDS_ON",
+            "check": "dependency"
+          }
+        ],
+        "message4": "Ports: %1",
+        "args4": [
           {
             "type": "input_statement",
             "name": "PORTS",
             "check": "port"
           }
         ],
-        "message4": "Environment: %1",
-        "args4": [
+        "message5": "Environment: %1",
+        "args5": [
           {
             "type": "input_statement",
             "name": "ENVIRONMENT",
             "check": "environment"
           }
         ],
-        "message5": "Volumes: %1",
-        "args5": [
+        "message6": "Volumes: %1",
+        "args6": [
           {
             "type": "input_statement",
             "name": "VOLUMES",
@@ -64,6 +72,21 @@ export function defineBlocks() {
         "colour": 269,
         "previousStatement": "service",
         "nextStatement": "service"
+      },
+      {
+        "type": "dependency",
+        "message0": "depends_on",
+        "message1": "Service: %1",
+        "args1": [
+          {
+            "type": "field_input",
+            "name": "TARGET",
+            "text": "db"
+          }
+        ],
+        "colour": 210,
+        "previousStatement": "dependency",
+        "nextStatement": "dependency"
       },
       {
         "type": "port",

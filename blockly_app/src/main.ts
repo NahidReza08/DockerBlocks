@@ -24,6 +24,10 @@ bootstrapBlocklyApp({
         },
         {
           "kind": "block",
+          "type": "dependency"
+        },
+        {
+          "kind": "block",
           "type": "port"
         },
         {

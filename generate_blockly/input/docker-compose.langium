@@ -14,10 +14,14 @@ entry Compose:
 Service:
     'service' name=ID '{'
         'image' image=ID
+        (dependencies+=Dependency)*
         (ports+=Port)*
         (environments+=Environment)*
         (volumes+=Volume)*
     '}';
+
+Dependency:
+    'depends_on' target=ID;
 
 Port:
     'port' host_port=INT '->' container_port=INT;

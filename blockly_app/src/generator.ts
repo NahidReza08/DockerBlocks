@@ -3,6 +3,7 @@ import * as Blockly from 'blockly';
 import { javascriptGenerator } from 'blockly/javascript';
 import {
   generateDockerComposeYaml,
+  generateDockerDependencyYaml,
   generateDockerEnvironmentYaml,
   generateDockerPortYaml,
   generateDockerServiceYaml,
@@ -19,6 +20,10 @@ generator.forBlock['compose'] = function (block: Blockly.Block): string {
 
 generator.forBlock['service'] = function (block: Blockly.Block): string {
   return generateDockerServiceYaml(block, generator);
+};
+
+generator.forBlock['dependency'] = function (block: Blockly.Block): string {
+  return generateDockerDependencyYaml(block);
 };
 
 generator.forBlock['port'] = function (block: Blockly.Block): string {

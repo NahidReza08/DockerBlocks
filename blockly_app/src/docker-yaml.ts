@@ -34,18 +34,27 @@ export function generateDockerServiceYaml(
 ): string {
   const name = block.getFieldValue('NAME') ?? '';
   const image = block.getFieldValue('IMAGE') ?? '';
+  const dependencies = generator.statementToCode(block, 'DEPENDS_ON').trimEnd();
   const ports = generator.statementToCode(block, 'PORTS').trimEnd();
   const environments = generator.statementToCode(block, 'ENVIRONMENT').trimEnd();
   const volumes = generator.statementToCode(block, 'VOLUMES').trimEnd();
 
+  const listedDependencies = listItems(dependencies, '    - ');
   const listedPorts = listItems(ports, '    - ');
   const listedEnvironments = listItems(environments, '    ');
   const listedVolumes = listItems(volumes, '    - ');
 
   return name + ':\n  image: ' + image + '\n' +
+    (listedDependencies ? '  depends_on:\n' + listedDependencies + '\n' : '') +
     (listedPorts ? '  ports:\n' + listedPorts + '\n' : '') +
     (listedEnvironments ? '  environment:\n' + listedEnvironments + '\n' : '') +
     (listedVolumes ? '  volumes:\n' + listedVolumes + '\n' : '');
+}
+
+export function generateDockerDependencyYaml(block: Blockly.Block): string {
+  const target = block.getFieldValue('TARGET') ?? '';
+
+  return target + '\n';
 }
 
 export function generateDockerPortYaml(block: Blockly.Block): string {
