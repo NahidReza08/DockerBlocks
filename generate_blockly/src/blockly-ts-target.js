@@ -139,8 +139,17 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message3 = "Depends On: %1";
+        block.message3 = "Restart: %1";
         block.args3 = [
+            {
+                type: "input_value",
+                name: "RESTART",
+                check: "restart"
+            }
+        ];
+
+        block.message4 = "Depends On: %1";
+        block.args4 = [
             {
                 type: "input_statement",
                 name: "DEPENDS_ON",
@@ -148,8 +157,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message4 = "Networks: %1";
-        block.args4 = [
+        block.message5 = "Networks: %1";
+        block.args5 = [
             {
                 type: "input_statement",
                 name: "NETWORKS",
@@ -157,8 +166,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message5 = "Ports: %1";
-        block.args5 = [
+        block.message6 = "Ports: %1";
+        block.args6 = [
             {
                 type: "input_statement",
                 name: "PORTS",
@@ -166,8 +175,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message6 = "Environment: %1";
-        block.args6 = [
+        block.message7 = "Environment: %1";
+        block.args7 = [
             {
                 type: "input_statement",
                 name: "ENVIRONMENT",
@@ -175,8 +184,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message7 = "Volumes: %1";
-        block.args7 = [
+        block.message8 = "Volumes: %1";
+        block.args8 = [
             {
                 type: "input_statement",
                 name: "VOLUMES",
@@ -191,6 +200,26 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             block.previousStatement = stackType;
             block.nextStatement = stackType;
         }
+
+        return block;
+    }
+
+    if (ruleLower === "restart") {
+        block.message0 = "Restart policy: %1";
+        block.args0 = [
+            {
+                type: "field_dropdown",
+                name: "POLICY",
+                options: [
+                    ["no", "no"],
+                    ["always", "always"],
+                    ["on-failure", "on-failure"],
+                    ["unless-stopped", "unless-stopped"]
+                ]
+            }
+        ];
+        block.colour = 200;
+        block.output = "restart";
 
         return block;
     }
@@ -468,6 +497,14 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
         ].join('\n');
     }
 
+    if (blockType === "restart") {
+        return [
+            `generator.forBlock['restart'] = function (block: Blockly.Block): [string, Order] {`,
+            `  return generateDockerRestartYaml(block);`,
+            `};`
+        ].join('\n');
+    }
+
     if (blockType === "dependency") {
         return [
             `generator.forBlock['dependency'] = function (block: Blockly.Block): string {`,
@@ -542,10 +579,10 @@ export function generateGeneratorTs(irRules) {
     .map(rule => ruleToGeneratorFunction(rule, stackTypes, valueRules))
     .join("\n\n");
   const usesDockerYamlHelpers = irRules.some(rule =>
-    ["compose", "service", "dependency", "networkref", "network", "port", "environment", "volume"].includes(rule.name.toLowerCase())
+    ["compose", "service", "restart", "dependency", "networkref", "network", "port", "environment", "volume"].includes(rule.name.toLowerCase())
   );
 
-  const usesOrder = functions.includes("Order.");
+  const usesOrder = functions.includes("Order");
   const generatorImport = usesOrder
     ? "import { javascriptGenerator, Order } from 'blockly/javascript';"
     : "import { javascriptGenerator } from 'blockly/javascript';";
@@ -557,6 +594,7 @@ export function generateGeneratorTs(irRules) {
   generateDockerNetworkRefYaml,
   generateDockerNetworkYaml,
   generateDockerPortYaml,
+  generateDockerRestartYaml,
   generateDockerServiceYaml,
   generateDockerVolumeYaml
 } from './docker-yaml';
@@ -578,7 +616,7 @@ ${functions}
 export function generateMainTs(irRules) {
     const toolboxCategories = [];
 
-    const dockerBlockTypes = new Set(["compose", "service", "dependency", "networkref", "network", "port", "environment", "volume"]);
+    const dockerBlockTypes = new Set(["compose", "service", "restart", "dependency", "networkref", "network", "port", "environment", "volume"]);
 
     const dockerRules = irRules.filter(r =>
         dockerBlockTypes.has(r.name.toLowerCase())

@@ -15,6 +15,7 @@ entry Compose:
 Service:
     'service' name=ID '{'
         'image' image=ID
+        (restart=Restart)?
         (dependencies+=Dependency)*
         (networks+=NetworkRef)*
         (ports+=Port)*
@@ -24,6 +25,9 @@ Service:
 
 Dependency:
     'depends_on' target=ID;
+
+Restart:
+    'restart' policy=('no' | 'always' | 'on-failure' | 'unless-stopped');
 
 NetworkRef:
     'network' target=ID;

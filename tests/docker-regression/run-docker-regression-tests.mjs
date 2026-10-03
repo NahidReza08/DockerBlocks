@@ -194,6 +194,11 @@ try {
   );
 
   assert.ok(
+    dockerValidationSource.includes("block.type === 'restart'"),
+    'Validation should inspect Docker restart blocks'
+  );
+
+  assert.ok(
     dockerValidationSource.includes("'networkref'"),
     'Validation should inspect service network reference blocks'
   );
@@ -236,6 +241,11 @@ try {
   assert.ok(
     dockerValidationSource.includes("Duplicate network name"),
     'Duplicate Docker network names should produce a duplicate-name error'
+  );
+
+  assert.ok(
+    dockerValidationSource.includes("Restart policy must be one of: no, always, on-failure, unless-stopped."),
+    'Malformed Docker restart policies should produce the supported-value error'
   );
 
   assert.ok(
@@ -624,6 +634,45 @@ try {
       backendNetworkRef.dispose(true);
       backendNetwork.dispose(true);
       assert.deepEqual(collectWorkspace(), [], `${context}: removing network blocks leaves existing validation clean`);
+
+      const restart = createBlock('restart', { POLICY: 'no' });
+      backend.service.getInput('RESTART').connection.connect(restart.outputConnection);
+      for (const policy of ['no', 'always', 'on-failure', 'unless-stopped']) {
+        restart.setFieldValue(policy, 'POLICY');
+        assert.deepEqual(collectWorkspace(), [], `${context}: supported restart policy "${policy}" validates cleanly`);
+      }
+      restart.setFieldValue('no', 'POLICY');
+      const restartYaml = generator.workspaceToCode(integrationWorkspace);
+      assert.equal(
+        restartYaml,
+        expectedYaml.replace(
+          '  backend:\n    image: node:20\n',
+          '  backend:\n    image: node:20\n    restart: "no"\n'
+        ),
+        `${context}: restart policy "no" is quoted in generated YAML`
+      );
+      assert.equal(parse(restartYaml).services.backend.restart, 'no',
+        `${context}: quoted restart policy "no" parses as a string`);
+      const originalRestartGetFieldValue = restart.getFieldValue.bind(restart);
+      restart.getFieldValue = (field) => field === 'POLICY'
+        ? 'sometimes'
+        : originalRestartGetFieldValue(field);
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === restart.id),
+        [{
+          type: 'validation',
+          message: 'Restart policy must be one of: no, always, on-failure, unless-stopped.',
+          severity: 'error',
+          blockId: restart.id
+        }],
+        `${context}: malformed restart policy is rejected if it enters runtime state`
+      );
+      restart.getFieldValue = originalRestartGetFieldValue;
+      restart.dispose(true);
+      assert.deepEqual(collectWorkspace(), [], `${context}: removing restart block restores existing validation clean state`);
+      assert.equal(generator.workspaceToCode(integrationWorkspace), expectedYaml,
+        `${context}: service without restart restores existing YAML exactly`);
+      console.log(`[PASS] ${context}: restart policies validate, quote "no", reject malformed values and preserve no-restart YAML`);
 
       const invalidFields = [
         [backend.service, 'IMAGE', '', 'node:20', 'Image is required'],

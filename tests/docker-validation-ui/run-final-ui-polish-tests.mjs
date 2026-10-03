@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import * as Blockly from 'blockly';
-import { javascriptGenerator } from 'blockly/javascript';
+import { javascriptGenerator, Order } from 'blockly/javascript';
 import ts from 'typescript';
 import { loadGrammar } from '../../generate_blockly/src/grammar-loader.js';
 import { buildIR } from '../../generate_blockly/src/ir-builder.js';
@@ -47,7 +47,7 @@ const timers = [];
 let copied;
 const navigator = { clipboard: { async writeText(text) { copied = text; } } };
 const context = vm.createContext({
-  Blockly: { ...Blockly, inject: () => workspace }, javascriptGenerator,
+  Blockly: { ...Blockly, inject: () => workspace }, javascriptGenerator, Order,
   validationErrors: [], navigator, Blob,
   URL: {
     createObjectURL(blob) { downloads.push(blob); return 'blob:yaml'; },

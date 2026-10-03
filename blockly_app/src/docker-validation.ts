@@ -2,6 +2,13 @@ import type * as Blockly from 'blockly';
 
 import type { UiValidationError } from './app-types';
 
+const SUPPORTED_RESTART_POLICIES = new Set([
+  'no',
+  'always',
+  'on-failure',
+  'unless-stopped'
+]);
+
 function trimFieldValue(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -85,6 +92,17 @@ export function collectDockerValidationErrors(
         const networkBlocks = networkBlocksByName.get(rawName) ?? [];
         networkBlocks.push(block);
         networkBlocksByName.set(rawName, networkBlocks);
+      }
+    }
+
+    if (block.type === 'restart') {
+      const policy = String(block.getFieldValue('POLICY') ?? '');
+
+      if (!SUPPORTED_RESTART_POLICIES.has(policy)) {
+        errors.push(requiredError(
+          'Restart policy must be one of: no, always, on-failure, unless-stopped.',
+          block.id
+        ));
       }
     }
 

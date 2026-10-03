@@ -80,12 +80,14 @@ async function testDockerConnectionRules() {
     const first = workspace.newBlock('volume');
     const second = workspace.newBlock('volume');
     const dependency = workspace.newBlock('dependency');
+    const restart = workspace.newBlock('restart');
     const networkRef = workspace.newBlock('networkref');
     const network = workspace.newBlock('network');
     const port = workspace.newBlock('port');
     const environment = workspace.newBlock('environment');
     const compose = workspace.newBlock('compose');
     const dependencies = service.getInput('DEPENDS_ON');
+    const restartInput = service.getInput('RESTART');
     const networks = service.getInput('NETWORKS');
     const composeNetworks = compose.getInput('NETWORKS');
     const volumes = service.getInput('VOLUMES');
@@ -96,6 +98,12 @@ async function testDockerConnectionRules() {
     dependencies.connection.connect(dependency.previousConnection);
     assert.equal(service.getInputTargetBlock('DEPENDS_ON'), dependency);
     console.log('[PASS] Service DEPENDS_ON accepts Dependency; Dependency stacks with dependency previous/next types');
+    assert.ok(restartInput, 'Service has RESTART');
+    assert.deepEqual(restartInput.connection.getCheck(), ['restart']);
+    assert.deepEqual(restart.outputConnection.getCheck(), ['restart']);
+    restartInput.connection.connect(restart.outputConnection);
+    assert.equal(service.getInputTargetBlock('RESTART'), restart);
+    console.log('[PASS] Service RESTART accepts Restart value block');
     assert.ok(networks, 'Service has NETWORKS');
     assert.deepEqual(networks.connection.getCheck(), ['networkref']);
     assert.deepEqual(networkRef.previousConnection.getCheck(), ['networkref']);
@@ -124,6 +132,10 @@ async function testDockerConnectionRules() {
       ['Volume cannot connect to ENVIRONMENT', service.getInput('ENVIRONMENT').connection, first.previousConnection],
       ['Dependency cannot connect to PORTS', service.getInput('PORTS').connection, dependency.previousConnection],
       ['Dependency cannot connect to VOLUMES', volumes.connection, dependency.previousConnection],
+      ['Restart cannot connect to PORTS', service.getInput('PORTS').connection, restart.outputConnection],
+      ['Restart cannot connect to NETWORKS', networks.connection, restart.outputConnection],
+      ['Dependency cannot connect to RESTART', restartInput.connection, dependency.previousConnection],
+      ['NetworkRef cannot connect to RESTART', restartInput.connection, networkRef.previousConnection],
       ['NetworkRef cannot connect to PORTS', service.getInput('PORTS').connection, networkRef.previousConnection],
       ['NetworkRef cannot connect to ENVIRONMENT', service.getInput('ENVIRONMENT').connection, networkRef.previousConnection],
       ['NetworkRef cannot connect to VOLUMES', volumes.connection, networkRef.previousConnection],
@@ -166,6 +178,10 @@ async function testDockerConnectionRules() {
     (block) => block.type === 'dependency'
   );
 
+  const restart = blocks.find(
+    (block) => block.type === 'restart'
+  );
+
   const networkRef = blocks.find(
     (block) => block.type === 'networkref'
   );
@@ -196,6 +212,11 @@ async function testDockerConnectionRules() {
   assert.ok(
     dependency,
     'Dependency block should be generated.'
+  );
+
+  assert.ok(
+    restart,
+    'Restart block should be generated.'
   );
 
   assert.ok(
@@ -254,6 +275,55 @@ async function testDockerConnectionRules() {
     dependency.nextStatement,
     'dependency',
     'Dependency should stack below another Dependency-compatible block.'
+  );
+
+  const serviceRestartInput = findInput(service, 'RESTART');
+
+  assert.ok(
+    serviceRestartInput,
+    'Service should expose a RESTART value input for an optional Restart block.'
+  );
+
+  assert.equal(
+    serviceRestartInput.type,
+    'input_value',
+    'Service RESTART input should be a Blockly value input.'
+  );
+
+  assert.equal(
+    serviceRestartInput.check,
+    'restart',
+    'Service RESTART input should only accept Restart blocks.'
+  );
+
+  assert.equal(
+    restart.output,
+    'restart',
+    'Restart should output only into a Restart-compatible value input.'
+  );
+
+  const restartPolicyInput = findInput(restart, 'POLICY');
+
+  assert.ok(
+    restartPolicyInput,
+    'Restart should expose a POLICY dropdown.'
+  );
+
+  assert.equal(
+    restartPolicyInput.type,
+    'field_dropdown',
+    'Restart POLICY should use a dropdown.'
+  );
+
+  assert.deepEqual(
+    restartPolicyInput.options,
+    [
+      ['no', 'no'],
+      ['always', 'always'],
+      ['on-failure', 'on-failure'],
+      ['unless-stopped', 'unless-stopped']
+    ],
+    'Restart POLICY dropdown should contain exactly the supported Compose values.'
   );
 
   const serviceNetworksInput = findInput(service, 'NETWORKS');

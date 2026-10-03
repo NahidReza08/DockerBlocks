@@ -1,7 +1,9 @@
 import type * as Blockly from 'blockly';
+import { Order } from 'blockly/javascript';
 
-type StatementGenerator = {
+type DockerYamlGenerator = {
   statementToCode(block: Blockly.Block, name: string): string;
+  valueToCode(block: Blockly.Block, name: string, order: Order): string;
 };
 
 function listItems(
@@ -19,7 +21,7 @@ function listItems(
 
 export function generateDockerComposeYaml(
   block: Blockly.Block,
-  generator: StatementGenerator
+  generator: DockerYamlGenerator
 ): string {
   const services = generator
     .statementToCode(block, 'SERVICES')
@@ -34,10 +36,11 @@ export function generateDockerComposeYaml(
 
 export function generateDockerServiceYaml(
   block: Blockly.Block,
-  generator: StatementGenerator
+  generator: DockerYamlGenerator
 ): string {
   const name = block.getFieldValue('NAME') ?? '';
   const image = block.getFieldValue('IMAGE') ?? '';
+  const restart = generator.valueToCode(block, 'RESTART', Order.NONE);
   const dependencies = generator.statementToCode(block, 'DEPENDS_ON').trimEnd();
   const networks = generator.statementToCode(block, 'NETWORKS').trimEnd();
   const ports = generator.statementToCode(block, 'PORTS').trimEnd();
@@ -51,11 +54,19 @@ export function generateDockerServiceYaml(
   const listedVolumes = listItems(volumes, '    - ');
 
   return name + ':\n  image: ' + image + '\n' +
+    (restart ? '  restart: ' + restart + '\n' : '') +
     (listedDependencies ? '  depends_on:\n' + listedDependencies + '\n' : '') +
     (listedNetworks ? '  networks:\n' + listedNetworks + '\n' : '') +
     (listedPorts ? '  ports:\n' + listedPorts + '\n' : '') +
     (listedEnvironments ? '  environment:\n' + listedEnvironments + '\n' : '') +
     (listedVolumes ? '  volumes:\n' + listedVolumes + '\n' : '');
+}
+
+export function generateDockerRestartYaml(block: Blockly.Block): [string, Order] {
+  const policy = block.getFieldValue('POLICY') ?? '';
+  const safePolicy = policy === 'no' ? '"no"' : policy;
+
+  return [safePolicy, Order.ATOMIC];
 }
 
 export function generateDockerDependencyYaml(block: Blockly.Block): string {

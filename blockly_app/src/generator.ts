@@ -1,6 +1,6 @@
 import * as Blockly from 'blockly';
 
-import { javascriptGenerator } from 'blockly/javascript';
+import { javascriptGenerator, Order } from 'blockly/javascript';
 import {
   generateDockerComposeYaml,
   generateDockerDependencyYaml,
@@ -8,6 +8,7 @@ import {
   generateDockerNetworkRefYaml,
   generateDockerNetworkYaml,
   generateDockerPortYaml,
+  generateDockerRestartYaml,
   generateDockerServiceYaml,
   generateDockerVolumeYaml
 } from './docker-yaml';
@@ -26,6 +27,10 @@ generator.forBlock['service'] = function (block: Blockly.Block): string {
 
 generator.forBlock['dependency'] = function (block: Blockly.Block): string {
   return generateDockerDependencyYaml(block);
+};
+
+generator.forBlock['restart'] = function (block: Blockly.Block): [string, Order] {
+  return generateDockerRestartYaml(block);
 };
 
 generator.forBlock['networkref'] = function (block: Blockly.Block): string {

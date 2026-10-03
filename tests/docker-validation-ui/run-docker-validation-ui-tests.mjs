@@ -34,6 +34,10 @@ function read(file) {
 }
 
 function assertDockerValidationRules(source, context) {
+  assert.ok(source.includes("block.type === 'restart'"), `${context}: validation inspects Restart blocks`);
+  assert.ok(source.includes('Restart policy must be one of: no, always, on-failure, unless-stopped.'),
+    `${context}: malformed Restart policies are rejected`);
+  console.log(`[PASS] ${context}: Restart policy validation uses the shared validator`);
   const networkValidation = source.match(/if \(block\.type === 'network'\) \{([\s\S]*?)\n    \}/)?.[1];
   assert.ok(networkValidation, `${context}: validation inspects Network blocks`);
   assert.ok(networkValidation.includes("getFieldValue('NAME')"), `${context}: Network NAME`);

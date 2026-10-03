@@ -60,6 +60,12 @@ function extractBlockDefinitions(blocksTs) {
   );
 }
 
+function blockInputs(block) {
+  return Object.entries(block)
+    .filter(([key]) => /^args\d+$/.test(key))
+    .flatMap(([, args]) => args);
+}
+
 async function loadGeneratedGenerator(generatorTs) {
   const dockerYamlSource = fs.readFileSync(
     path.join(repoRoot, 'blockly_app/src/docker-yaml.ts'),
@@ -340,6 +346,95 @@ async function testComposeYamlGeneration() {
     console.log('✓ backend service generated');
     console.log('✓ node image generated');
 
+    console.log('Testing Docker Compose restart policy grammar and YAML...');
+
+    const grammarServices = await createServicesForGrammar({ grammar });
+    const noRestartDsl =
+      'compose {\n' +
+      '  service web {\n' +
+      '    image nginx\n' +
+      '  }\n' +
+      '}\n';
+    const noRestartParse = grammarServices.parser.LangiumParser.parse(noRestartDsl);
+    assert.deepEqual(noRestartParse.lexerErrors, [], 'Service without restart should have no lexer errors');
+    assert.deepEqual(noRestartParse.parserErrors, [], 'Service without restart should parse');
+
+    for (const policy of ['no', 'always', 'on-failure', 'unless-stopped']) {
+      const restartDsl =
+        'compose {\n' +
+        '  service web {\n' +
+        '    image nginx\n' +
+        '    restart ' + policy + '\n' +
+        '  }\n' +
+        '}\n';
+      const restartParse = grammarServices.parser.LangiumParser.parse(restartDsl);
+      assert.deepEqual(restartParse.lexerErrors, [], `Restart ${policy} should have no lexer errors`);
+      assert.deepEqual(restartParse.parserErrors, [], `Restart ${policy} should parse`);
+      assert.equal(restartParse.value.services[0].restart.policy, policy);
+    }
+
+    const restartBlockDefinition = blockDefinitions.find((block) => block.type === 'restart');
+    assert.ok(restartBlockDefinition, 'Generated blocks should include restart');
+    assert.equal(
+      restartBlockDefinition.output,
+      'restart',
+      'Restart should be a value block for the Service RESTART input.'
+    );
+    assert.deepEqual(
+      blockInputs(restartBlockDefinition).find((input) => input.name === 'POLICY'),
+      {
+        type: 'field_dropdown',
+        name: 'POLICY',
+        options: [
+          ['no', 'no'],
+          ['always', 'always'],
+          ['on-failure', 'on-failure'],
+          ['unless-stopped', 'unless-stopped']
+        ]
+      },
+      'Restart policy should use a dropdown containing exactly the supported Compose values.'
+    );
+
+    for (const [policy, expectedScalar] of [
+      ['no', '"no"'],
+      ['always', 'always'],
+      ['on-failure', 'on-failure'],
+      ['unless-stopped', 'unless-stopped']
+    ]) {
+      const restartWorkspace = new Blockly.Workspace();
+      try {
+        const restartCompose = restartWorkspace.newBlock('compose');
+        const restartService = restartWorkspace.newBlock('service');
+        restartService.setFieldValue('web', 'NAME');
+        restartService.setFieldValue('nginx', 'IMAGE');
+        restartCompose.getInput('SERVICES').connection.connect(restartService.previousConnection);
+        const restart = restartWorkspace.newBlock('restart');
+        restart.setFieldValue(policy, 'POLICY');
+        restartService.getInput('RESTART').connection.connect(restart.outputConnection);
+        const restartYaml = generator.workspaceToCode(restartWorkspace);
+        assert.equal(
+          restartYaml,
+          'services:\n' +
+          '  web:\n' +
+          '    image: nginx\n' +
+          '    restart: ' + expectedScalar + '\n',
+          `Restart policy ${policy} should generate stable YAML.`
+        );
+        assert.deepEqual(parse(restartYaml), {
+          services: {
+            web: {
+              image: 'nginx',
+              restart: policy
+            }
+          }
+        }, `Restart policy ${policy} should parse as the intended string value.`);
+      } finally {
+        restartWorkspace.dispose();
+      }
+    }
+
+    console.log('✓ restart policy grammar and YAML generated');
+
     console.log('Testing Docker Compose depends_on grammar and YAML...');
 
     const oneDependencyDsl =
@@ -352,7 +447,6 @@ async function testComposeYamlGeneration() {
       '    image postgres\n' +
       '  }\n' +
       '}\n';
-    const grammarServices = await createServicesForGrammar({ grammar });
     const oneDependencyParse = grammarServices.parser.LangiumParser.parse(oneDependencyDsl);
     assert.deepEqual(oneDependencyParse.lexerErrors, [], 'One dependency example should have no lexer errors');
     assert.deepEqual(oneDependencyParse.parserErrors, [], 'One dependency example should parse');

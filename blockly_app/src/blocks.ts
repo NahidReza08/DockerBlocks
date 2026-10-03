@@ -45,40 +45,48 @@ export function defineBlocks() {
             "text": "nginx"
           }
         ],
-        "message3": "Depends On: %1",
+        "message3": "Restart: %1",
         "args3": [
+          {
+            "type": "input_value",
+            "name": "RESTART",
+            "check": "restart"
+          }
+        ],
+        "message4": "Depends On: %1",
+        "args4": [
           {
             "type": "input_statement",
             "name": "DEPENDS_ON",
             "check": "dependency"
           }
         ],
-        "message4": "Networks: %1",
-        "args4": [
+        "message5": "Networks: %1",
+        "args5": [
           {
             "type": "input_statement",
             "name": "NETWORKS",
             "check": "networkref"
           }
         ],
-        "message5": "Ports: %1",
-        "args5": [
+        "message6": "Ports: %1",
+        "args6": [
           {
             "type": "input_statement",
             "name": "PORTS",
             "check": "port"
           }
         ],
-        "message6": "Environment: %1",
-        "args6": [
+        "message7": "Environment: %1",
+        "args7": [
           {
             "type": "input_statement",
             "name": "ENVIRONMENT",
             "check": "environment"
           }
         ],
-        "message7": "Volumes: %1",
-        "args7": [
+        "message8": "Volumes: %1",
+        "args8": [
           {
             "type": "input_statement",
             "name": "VOLUMES",
@@ -103,6 +111,36 @@ export function defineBlocks() {
         "colour": 210,
         "previousStatement": "dependency",
         "nextStatement": "dependency"
+      },
+      {
+        "type": "restart",
+        "message0": "Restart policy: %1",
+        "args0": [
+          {
+            "type": "field_dropdown",
+            "name": "POLICY",
+            "options": [
+              [
+                "no",
+                "no"
+              ],
+              [
+                "always",
+                "always"
+              ],
+              [
+                "on-failure",
+                "on-failure"
+              ],
+              [
+                "unless-stopped",
+                "unless-stopped"
+              ]
+            ]
+          }
+        ],
+        "colour": 200,
+        "output": "restart"
       },
       {
         "type": "networkref",
