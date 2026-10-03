@@ -87,9 +87,10 @@ const downloads = [];
 const revoked = [];
 const timers = [];
 let copied;
+let injectedOptions;
 const navigator = { clipboard: { async writeText(text) { copied = text; } } };
 const context = vm.createContext({
-  Blockly: { ...Blockly, inject: () => workspace }, javascriptGenerator, Order,
+  Blockly: { ...Blockly, inject: (_id, options) => { injectedOptions = options; return workspace; } }, javascriptGenerator, Order,
   validationErrors: [], navigator, Blob,
   URL: {
     createObjectURL(blob) { downloads.push(blob); return 'blob:yaml'; },
@@ -130,6 +131,9 @@ try {
   execute(read('blockly_app/src/blocks.ts'), context);
   execute(read('blockly_app/src/generator.ts'), context);
   execute(main.replace('bootstrapBlocklyApp({', 'globalThis.app = bootstrapBlocklyApp({'), context);
+  assert.equal(injectedOptions.move.scrollbars, true, 'Blockly native scrollbars are enabled');
+  assert.equal(injectedOptions.move.drag, true, 'Blockly workspace drag panning is enabled');
+  assert.equal(injectedOptions.move.wheel, true, 'Blockly wheel navigation is enabled');
   const simpleExpected = [
     'services:',
     '  web:',
@@ -178,6 +182,7 @@ try {
   assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'compose').length, 1);
   assert.match(validationText(), /No configuration to validate yet/);
   assert.match(validationText(), /Add a Service block/);
+  assert.equal(elements.errorOutput.children[0].className, 'validation-empty-state');
   assert.equal(validationText().includes('Ports valid'), false, 'Empty workspace does not show unrelated green validation');
   const initialCompose = workspace
     .getAllBlocks(false)
@@ -428,6 +433,9 @@ try {
   assert.equal((html.match(/data-block-type=/g) ?? []).length, 12, 'Palette exposes every supported block action');
   assert.equal((html.match(/id="copyYaml"/g) ?? []).length, 1, 'Copy appears once');
   assert.equal((html.match(/id="downloadYaml"/g) ?? []).length, 1, 'Download appears once');
+  assert.ok(html.includes('validation-empty-state'), 'Validation empty state uses a stable icon-and-copy layout');
+  assert.ok(html.includes('white-space: nowrap'), 'Headers and status controls guard against narrow wrapping');
+  assert.ok(html.includes('minmax(430px, 32%)'), 'YAML column keeps enough width for title, status, and actions');
   assert.ok(html.includes('Docker-Blocks'));
   assert.ok(html.includes('Visual Docker Compose Generator'));
   assert.ok(html.includes('docker-compose.yml'));

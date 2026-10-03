@@ -34,6 +34,11 @@ export function bootstrapBlocklyApp({
       colour: 'rgba(148, 163, 184, 0.45)',
       snap: false
     },
+    move: {
+      scrollbars: true,
+      drag: true,
+      wheel: true
+    },
     zoom: {
       controls: true,
       wheel: true,

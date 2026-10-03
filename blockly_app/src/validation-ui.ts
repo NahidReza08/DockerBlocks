@@ -98,12 +98,22 @@ function showNoValidationErrors(
 
   if (!hasService) {
     const empty = document.createElement('div');
-    empty.className = 'validation-empty';
-    empty.appendChild(createTextElement('validation-empty-title', 'No configuration to validate yet.'));
-    empty.appendChild(createTextElement(
+    empty.className = 'validation-empty-state';
+
+    const icon = document.createElement('div');
+    icon.className = 'validation-empty-icon';
+    icon.textContent = 'i';
+    empty.appendChild(icon);
+
+    const copy = document.createElement('div');
+    copy.className = 'validation-empty-copy';
+    copy.appendChild(createTextElement('validation-empty-title', 'No configuration to validate yet.'));
+    copy.appendChild(createTextElement(
       'validation-empty-message',
       'Add a Service block to create a valid Docker Compose configuration.'
     ));
+    empty.appendChild(copy);
+
     errorOutput.appendChild(empty);
     return;
   }
