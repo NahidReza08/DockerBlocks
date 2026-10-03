@@ -17,7 +17,9 @@ assert.equal(generateMainTs(buildIR(grammar)), main, 'Runtime main.ts matches re
 
 // Execute the real handlers with real headless Blockly and a minimal DOM surface.
 function execute(source, context) {
-  const script = source.replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
+  const script = source
+    .replace(/^import[\s\S]*?;\r?\n/gm, '')
+    .replace(/^export /gm, '');
   vm.runInContext(ts.transpileModule(script, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
   }).outputText, context);
@@ -68,21 +70,26 @@ const clean = () => {
 };
 
 try {
+  execute(read('blockly_app/src/docker-yaml.ts'), context);
+  execute(read('blockly_app/src/docker-validation.ts'), context);
+  execute(read('blockly_app/src/validation-ui.ts'), context);
+  execute(read('blockly_app/src/docker-example.ts'), context);
+  execute(read('blockly_app/src/app-bootstrap.ts'), context);
   execute(read('blockly_app/src/blocks.ts'), context);
   execute(read('blockly_app/src/generator.ts'), context);
-  execute(main, context);
+  execute(main.replace('bootstrapBlocklyApp({', 'globalThis.app = bootstrapBlocklyApp({'), context);
   const expected = read('tests/docker-compose-examples/D04-valid-multi-service.yaml');
   assert.equal(elements.codeOutput.textContent, '', 'Initial output is empty YAML');
   const invalid = workspace.newBlock('service');
   invalid.setFieldValue('', 'NAME');
-  vm.runInContext('handleWorkspaceChange()', context);
+  vm.runInContext('app.handleWorkspaceChange()', context);
   assert.equal(elements.errorOutput.children[0].className, 'validation-error');
   click('clearWorkspace');
   assert.equal(workspace.getAllBlocks(false).length, 0);
   assert.equal(elements.codeOutput.textContent, '');
   clean();
   // A queued Blockly event must not bring cleared errors back.
-  vm.runInContext('handleWorkspaceChange()', context);
+  vm.runInContext('app.handleWorkspaceChange()', context);
   clean();
   for (let i = 0; i < 2; i++) {
     click('loadExample');

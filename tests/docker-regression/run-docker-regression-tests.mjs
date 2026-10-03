@@ -6,7 +6,6 @@ import { pathToFileURL } from 'node:url';
 import * as Blockly from 'blockly';
 import ts from 'typescript';
 import { parse } from 'yaml';
-import { generateMainTs } from '../../generate_blockly/src/blockly-ts-target.js';
 
 const projectRoot = path.resolve('.');
 const tempBlocksPath = path.join(
@@ -17,9 +16,14 @@ const tempGeneratorPath = path.join(
   projectRoot,
   'tests/docker-regression/.temp-generator.mjs'
 );
+const tempDockerYamlPath = path.join(
+  projectRoot,
+  'tests/docker-regression/.temp-docker-yaml.mjs'
+);
 
 async function loadTypescriptModule(sourcePath, tempPath) {
   const source = await readFile(sourcePath, 'utf8');
+  let sourceForTranspile = source;
 
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: {
@@ -28,11 +32,52 @@ async function loadTypescriptModule(sourcePath, tempPath) {
     }
   });
 
-  await writeFile(tempPath, outputText);
+  if (outputText.includes("from './docker-yaml';")) {
+    const dockerYamlSource = await readFile(
+      path.join(projectRoot, 'blockly_app/src/docker-yaml.ts'),
+      'utf8'
+    );
+    const transpiledDockerYaml = ts.transpileModule(dockerYamlSource, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext
+      }
+    });
+
+    await writeFile(tempDockerYamlPath, transpiledDockerYaml.outputText);
+    sourceForTranspile = outputText.replace(
+      "from './docker-yaml';",
+      "from './.temp-docker-yaml.mjs';"
+    );
+  } else {
+    sourceForTranspile = outputText;
+  }
+
+  await writeFile(tempPath, sourceForTranspile);
 
   return import(
     pathToFileURL(tempPath).href + '?cache=' + Date.now()
   );
+}
+
+async function loadDockerValidationCollector() {
+  const source = await readFile(
+    path.join(projectRoot, 'blockly_app/src/docker-validation.ts'),
+    'utf8'
+  );
+  const script = source
+    .replace(/^import .*;\r?\n/gm, '')
+    .replace(/^export /gm, '');
+  const { outputText } = ts.transpileModule(script, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.None
+    }
+  });
+
+  return new Function(
+    outputText + '\nreturn collectDockerValidationErrors;'
+  )();
 }
 
 console.log('\nDocker Regression Tests\n');
@@ -110,114 +155,123 @@ try {
     path.join(projectRoot, 'blockly_app/src/main.ts'),
     'utf8'
   );
+  const dockerValidationSource = await readFile(
+    path.join(projectRoot, 'blockly_app/src/docker-validation.ts'),
+    'utf8'
+  );
+  const appBootstrapSource = await readFile(
+    path.join(projectRoot, 'blockly_app/src/app-bootstrap.ts'),
+    'utf8'
+  );
+  const validationUiSource = await readFile(
+    path.join(projectRoot, 'blockly_app/src/validation-ui.ts'),
+    'utf8'
+  );
 
   assert.ok(
-    mainSource.includes("block.type === 'service'"),
+    mainSource.includes('bootstrapBlocklyApp'),
+    'Generated main.ts should delegate runtime behavior to the handwritten bootstrap'
+  );
+
+  assert.ok(
+    dockerValidationSource.includes("block.type === 'service'"),
     'Validation should inspect Docker service blocks'
   );
 
   assert.ok(
-    mainSource.includes("block.type === 'port'"),
+    dockerValidationSource.includes("block.type === 'port'"),
     'Validation should inspect Docker port blocks'
   );
 
   assert.ok(
-    mainSource.includes("block.type === 'environment'"),
+    dockerValidationSource.includes("block.type === 'environment'"),
     'Validation should inspect Docker environment blocks'
   );
 
   assert.ok(
-    mainSource.includes("block.getFieldValue('IMAGE')"),
+    dockerValidationSource.includes("block.getFieldValue('IMAGE')"),
     'Validation should inspect the service IMAGE field'
   );
 
   assert.ok(
-    mainSource.includes("block.getFieldValue('HOST_PORT')"),
+    dockerValidationSource.includes("block.getFieldValue('HOST_PORT')"),
     'Validation should inspect the port HOST_PORT field'
   );
 
   assert.ok(
-    mainSource.includes("block.getFieldValue('CONTAINER_PORT')"),
+    dockerValidationSource.includes("block.getFieldValue('CONTAINER_PORT')"),
     'Validation should inspect the port CONTAINER_PORT field'
   );
 
   assert.ok(
-    mainSource.includes("block.getFieldValue('KEY')"),
+    dockerValidationSource.includes("block.getFieldValue('KEY')"),
     'Validation should inspect the environment KEY field'
   );
 
   assert.ok(
-    mainSource.includes("Environment key is required."),
+    dockerValidationSource.includes("Environment key is required."),
     'Missing Docker environment key should produce the required error'
   );
 
   assert.ok(
-    mainSource.includes("Environment key must start with a letter or underscore and contain only letters, numbers, and underscores."),
+    dockerValidationSource.includes("Environment key must start with a letter or underscore and contain only letters, numbers, and underscores."),
     'Invalid Docker environment key should produce the identifier error'
   );
 
   assert.ok(
-    mainSource.includes("message: 'Image is required'"),
+    dockerValidationSource.includes("'Image is required'"),
     'Missing Docker image should produce the existing validation error'
   );
 
   assert.ok(
-    mainSource.includes("message: 'Host port is required.'"),
+    dockerValidationSource.includes("'Host port is required.'"),
     'Missing Docker host port should produce a port validation error'
   );
 
   assert.ok(
-    mainSource.includes("message: 'Container port is required.'"),
+    dockerValidationSource.includes("'Container port is required.'"),
     'Missing Docker container port should produce a port validation error'
   );
 
   assert.ok(
-    mainSource.includes("message: 'Host port must be an integer between 1 and 65535.'"),
+    dockerValidationSource.includes("'Host port must be an integer between 1 and 65535.'"),
     'Port host should use the shared integer range validation message'
   );
 
   assert.ok(
-    mainSource.includes("message: 'Container port must be an integer between 1 and 65535.'"),
+    dockerValidationSource.includes("'Container port must be an integer between 1 and 65535.'"),
     'Port container should use the shared integer range validation message'
   );
 
   assert.ok(
-    mainSource.includes('blockId: block.id'),
+    dockerValidationSource.includes('block.id'),
     'Docker validation error should identify the invalid Blockly block'
   );
 
   assert.ok(
-    mainSource.includes("VALIDATION_WARNING_ID = 'captured-validation-error'"),
+    validationUiSource.includes("VALIDATION_WARNING_ID = 'captured-validation-error'"),
     'Docker validation should use the shared Blockly warning ID'
   );
 
   assert.ok(
-    mainSource.includes('block.setWarningText('),
+    validationUiSource.includes('block.setWarningText('),
     'Validation errors should be attached to Blockly blocks as visual warnings'
   );
 
   assert.ok(
-    mainSource.includes('...collectWorkspaceValidationErrors()'),
+    appBootstrapSource.includes('...collectDockerValidationErrors(workspace)'),
     'Workspace Docker errors should enter the existing validation pipeline'
   );
 
   invalidWorkspace.dispose();
 
   // Execute the production collector itself, without bootstrapping the browser UI.
-  for (const [context, source] of [
-    ['runtime', mainSource],
-    ['generated template', generateMainTs([])]
+  for (const [context, collect] of [
+    ['runtime docker-validation module', await loadDockerValidationCollector()]
   ]) {
-    const sourceFile = ts.createSourceFile('main.ts', source, ts.ScriptTarget.Latest, true);
-    const collector = sourceFile.statements.find((statement) =>
-      ts.isFunctionDeclaration(statement) && statement.name?.text === 'collectWorkspaceValidationErrors');
-    assert.ok(collector, `${context}: validation collector exists`);
-    const { outputText } = ts.transpileModule(collector.getText(sourceFile), {
-      compilerOptions: { target: ts.ScriptTarget.ES2022 }
-    });
     const integrationWorkspace = new Blockly.Workspace();
     try {
-      const collect = new Function('workspace', outputText + '\nreturn collectWorkspaceValidationErrors;')(integrationWorkspace);
+      const collectWorkspace = () => collect(integrationWorkspace);
       const compose = integrationWorkspace.newBlock('compose');
       function createBlock(type, fields) {
         const block = integrationWorkspace.newBlock(type);
@@ -264,7 +318,7 @@ try {
     volumes:
       - "./data:/app/data"
 `;
-      assert.deepEqual(collect(), [], `${context}: full Compose fixture validates cleanly`);
+      assert.deepEqual(collectWorkspace(), [], `${context}: full Compose fixture validates cleanly`);
       const yaml = generator.workspaceToCode(integrationWorkspace);
       assert.equal(yaml, expectedYaml, `${context}: full Compose YAML preserves service, section and environment order`);
       assert.equal(generator.workspaceToCode(integrationWorkspace), yaml,
@@ -299,7 +353,7 @@ try {
         type: 'validation', message, severity: 'error', blockId: block.id
       }));
       function assertErrors(expected) {
-        const errors = collect();
+        const errors = collectWorkspace();
         assert.equal(errors.length, expected.length, `${context}: no missing or extra validation errors`);
         for (const block of integrationWorkspace.getAllBlocks(false)) {
           assert.deepEqual(
@@ -316,7 +370,7 @@ try {
         block.setFieldValue(valid, field);
         assertErrors(expectedErrors.slice(index + 1));
       }
-      assert.deepEqual(collect(), [], `${context}: correcting all invalid fields clears validation`);
+      assert.deepEqual(collectWorkspace(), [], `${context}: correcting all invalid fields clears validation`);
       assert.equal(generator.workspaceToCode(integrationWorkspace), expectedYaml,
         `${context}: corrected workspace restores the full expected YAML`);
       console.log(`[PASS] ${context}: incremental corrections clear only resolved errors and restore valid Compose YAML`);
@@ -326,7 +380,7 @@ try {
 
     const volumeWorkspace = new Blockly.Workspace();
     try {
-      const collect = new Function('workspace', outputText + '\nreturn collectWorkspaceValidationErrors;')(volumeWorkspace);
+      const collectVolumeWorkspace = () => collect(volumeWorkspace);
       const compose = volumeWorkspace.newBlock('compose');
       const service = volumeWorkspace.newBlock('service');
       service.setFieldValue('backend', 'NAME');
@@ -336,7 +390,7 @@ try {
       volume.setFieldValue('./data', 'SOURCE');
       volume.setFieldValue('/app/data', 'TARGET');
       service.getInput('VOLUMES').connection.connect(volume.previousConnection);
-      assert.deepEqual(collect(), []);
+      assert.deepEqual(collectVolumeWorkspace(), []);
       const yaml = generator.workspaceToCode(volumeWorkspace);
       assert.equal(yaml, 'services:\n  backend:\n    image: node:20\n    volumes:\n      - "./data:/app/data"\n');
       assert.deepEqual(parse(yaml), { services: { backend: { image: 'node:20', volumes: ['./data:/app/data'] } } });
@@ -347,10 +401,10 @@ try {
       ]) {
         for (const empty of ['', '   ']) {
           volume.setFieldValue(empty, field);
-          assert.deepEqual(collect(), [{ type: 'validation', message, severity: 'error', blockId: volume.id }]);
+          assert.deepEqual(collectVolumeWorkspace(), [{ type: 'validation', message, severity: 'error', blockId: volume.id }]);
         }
         volume.setFieldValue(valid, field);
-        assert.deepEqual(collect(), []);
+        assert.deepEqual(collectVolumeWorkspace(), []);
         console.log(`[PASS] ${context}: empty/blank Volume ${field} error attaches to Volume block and clears after correction`);
       }
       const port = volumeWorkspace.newBlock('port');
@@ -361,13 +415,13 @@ try {
       env.setFieldValue('NODE_ENV', 'KEY');
       env.setFieldValue('production', 'VALUE');
       service.getInput('ENVIRONMENT').connection.connect(env.previousConnection);
-      assert.deepEqual(collect(), []);
+      assert.deepEqual(collectVolumeWorkspace(), []);
       assert.equal(generator.workspaceToCode(volumeWorkspace),
         'services:\n  backend:\n    image: node:20\n    ports:\n      - "3000:3000"\n    environment:\n      NODE_ENV: production\n    volumes:\n      - "./data:/app/data"\n');
       service.setFieldValue('', 'IMAGE');
       port.setFieldValue('0', 'HOST_PORT');
       env.setFieldValue('', 'KEY');
-      const errors = collect();
+      const errors = collectVolumeWorkspace();
       assert.equal(errors.length, 3);
       for (const [block, message] of [
         [service, 'Image is required'],
@@ -391,4 +445,5 @@ try {
 } finally {
   await rm(tempBlocksPath, { force: true });
   await rm(tempGeneratorPath, { force: true });
+  await rm(tempDockerYamlPath, { force: true });
 }

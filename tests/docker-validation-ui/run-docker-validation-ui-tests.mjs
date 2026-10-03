@@ -16,15 +16,24 @@ const templateFile = path.join(
   repoRoot,
   'generate_blockly/src/blockly-ts-target.js'
 );
+const dockerValidationFile = path.join(
+  repoRoot,
+  'blockly_app/src/docker-validation.ts'
+);
+const validationUiFile = path.join(
+  repoRoot,
+  'blockly_app/src/validation-ui.ts'
+);
+const appBootstrapFile = path.join(
+  repoRoot,
+  'blockly_app/src/app-bootstrap.ts'
+);
 
 function read(file) {
   return fs.readFileSync(file, 'utf8');
 }
 
-function assertDockerUsesSharedValidationPipeline(
-  source,
-  context
-) {
+function assertDockerValidationRules(source, context) {
   const volumeValidation = source.match(/if \(block\.type === 'volume'\) \{([\s\S]*?)\n    \}/)?.[1];
   assert.ok(volumeValidation, `${context}: validation inspects Volume blocks`);
   for (const field of ['SOURCE', 'TARGET']) {
@@ -33,12 +42,12 @@ function assertDockerUsesSharedValidationPipeline(
   for (const message of ['Volume source is required.', 'Volume target is required.']) {
     assert.ok(volumeValidation.includes(message), `${context}: ${message}`);
   }
-  assert.equal((volumeValidation.match(/blockId:\s*block\.id/g) ?? []).length, 2,
+  assert.equal((volumeValidation.match(/block\.id/g) ?? []).length, 2,
     `${context}: both Volume errors identify their Volume block`);
   console.log(`[PASS] ${context}: Volume SOURCE/TARGET errors use blockId: block.id`);
   assert.match(
     source,
-    /function collectWorkspaceValidationErrors\(\): UiValidationError\[\]/,
+    /function collectDockerValidationErrors\(/,
     `${context}: Docker validation should produce UiValidationError objects.`
   );
 
@@ -98,32 +107,34 @@ function assertDockerUsesSharedValidationPipeline(
 
   assert.match(
     source,
-    /blockId:\s*block\.id/,
+    /function requiredError\(message: string, blockId: string\)[\s\S]*blockId[\s\S]*requiredError\([\s\S]*block\.id/,
     `${context}: Docker validation errors should identify their Blockly block.`
   );
+}
 
+function assertSharedValidationPipeline(appBootstrapSource, validationUiSource) {
   assert.match(
-    source,
-    /refreshValidationState\(\[\s*\.\.\.validationErrors,\s*\.\.\.collectWorkspaceValidationErrors\(\)\s*\]\);/,
-    `${context}: grammar and Docker errors should enter the same validation state.`
+    appBootstrapSource,
+    /\.\.\.validationErrors,\s*\.\.\.collectDockerValidationErrors\(workspace\)/,
+    'Bootstrap: grammar and Docker errors should enter the same validation state.'
   );
 
   assert.match(
-    source,
-    /function refreshValidationState\([\s\S]*?showCapturedValidationErrors\(\);[\s\S]*?updateBlockValidationWarnings\(\);/,
-    `${context}: shared validation state should update both the error UI and Blockly warnings.`
+    appBootstrapSource,
+    /validationUi\.refresh\(collectValidationErrors\(\)\)/,
+    'Bootstrap: shared validation state should be refreshed from one call site.'
   );
 
   assert.match(
-    source,
-    /capturedValidationErrors\.forEach\(\(error\) => \{[\s\S]*?error\.blockId/,
-    `${context}: Blockly warnings should be driven by captured validation errors.`
+    validationUiSource,
+    /validationErrors\.forEach\(\(error\) => \{[\s\S]*?error\.blockId/,
+    'Validation UI: Blockly warnings should be driven by captured validation errors.'
   );
 
   assert.match(
-    source,
+    validationUiSource,
     /block\.setWarningText\(/,
-    `${context}: existing Blockly warning UI should display validation errors.`
+    'Validation UI: existing Blockly warning UI should display validation errors.'
   );
 }
 
@@ -133,9 +144,20 @@ console.log(
 
 console.log('Testing generated Blockly application...');
 
-assertDockerUsesSharedValidationPipeline(
+assert.match(
   read(mainTsFile),
-  'Generated main.ts'
+  /bootstrapBlocklyApp/,
+  'Generated main.ts should call the handwritten app bootstrap.'
+);
+
+assertDockerValidationRules(
+  read(dockerValidationFile),
+  'Docker validation module'
+);
+
+assertSharedValidationPipeline(
+  read(appBootstrapFile),
+  read(validationUiFile)
 );
 
 console.log(
@@ -144,9 +166,10 @@ console.log(
 
 console.log('Testing generator template...');
 
-assertDockerUsesSharedValidationPipeline(
+assert.match(
   read(templateFile),
-  'Generator template'
+  /bootstrapBlocklyApp/,
+  'Generator template should emit a bootstrap call instead of inline app logic.'
 );
 
 console.log(

@@ -20,6 +20,12 @@ const validationErrorFile =
 const mainTsFile =
   'blockly_app/src/main.ts';
 
+const appBootstrapFile =
+  'blockly_app/src/app-bootstrap.ts';
+
+const validationUiFile =
+  'blockly_app/src/validation-ui.ts';
+
 const generatedFiles = [
   'blockly_app/src/blocks.ts',
   'blockly_app/src/generator.ts',
@@ -117,22 +123,33 @@ function testValidGrammar() {
     'utf8'
   );
 
+  const validationUiTs = fs.readFileSync(
+    absolute(validationUiFile),
+    'utf8'
+  );
+
   assert.match(
     mainTs,
+    /bootstrapBlocklyApp/,
+    'Generated main.ts should delegate runtime setup to the handwritten bootstrap.'
+  );
+
+  assert.match(
+    validationUiTs,
     /createValidationErrorElement/,
-    'Generated main.ts should preserve rich validation-error rendering.'
+    'Handwritten validation UI should preserve rich validation-error rendering.'
   );
 
   assert.match(
-    mainTs,
+    validationUiTs,
     /validation-error-title/,
-    'Generated main.ts should preserve validation error styling hooks.'
+    'Handwritten validation UI should preserve validation error styling hooks.'
   );
 
   assert.match(
-    mainTs,
-    /showNoValidationErrors/,
-    'Generated main.ts should preserve the no-error UI state.'
+    validationUiTs,
+    /showNoErrors/,
+    'Handwritten validation UI should preserve the no-error UI state.'
   );
 
   assertTypeScriptPasses('Valid grammar');
@@ -198,16 +215,32 @@ function testInvalidGrammar() {
     'utf8'
   );
 
-  assert.match(
-    mainTs,
-    /showCapturedValidationErrors/,
-    'Blockly UI should contain captured-error display logic.'
+  const appBootstrapTs = fs.readFileSync(
+    absolute(appBootstrapFile),
+    'utf8'
+  );
+
+  const validationUiTs = fs.readFileSync(
+    absolute(validationUiFile),
+    'utf8'
   );
 
   assert.match(
     mainTs,
+    /bootstrapBlocklyApp/,
+    'Generated main.ts should keep using the handwritten app bootstrap.'
+  );
+
+  assert.match(
+    appBootstrapTs,
+    /validationUi\.refresh/,
+    'Blockly bootstrap should refresh captured validation errors.'
+  );
+
+  assert.match(
+    validationUiTs,
     /createValidationErrorElement/,
-    'Blockly UI should render captured validation errors.'
+    'Blockly UI module should render captured validation errors.'
   );
 
   assertTypeScriptPasses('Invalid grammar');

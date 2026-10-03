@@ -61,6 +61,18 @@ function extractBlockDefinitions(blocksTs) {
 }
 
 async function loadGeneratedGenerator(generatorTs) {
+  const dockerYamlSource = fs.readFileSync(
+    path.join(repoRoot, 'blockly_app/src/docker-yaml.ts'),
+    'utf8'
+  );
+
+  const transpiledDockerYaml = ts.transpileModule(dockerYamlSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022
+    }
+  });
+
   const transpiled = ts.transpileModule(generatorTs, {
     compilerOptions: {
       module: ts.ModuleKind.ES2022,
@@ -72,10 +84,23 @@ async function loadGeneratedGenerator(generatorTs) {
     __dirname,
     `.generated-generator-${process.pid}.mjs`
   );
+  const tempDockerYamlModule = path.join(
+    __dirname,
+    `.generated-docker-yaml-${process.pid}.mjs`
+  );
 
   fs.writeFileSync(
     tempModule,
-    transpiled.outputText,
+    transpiled.outputText.replace(
+      "from './docker-yaml';",
+      `from './${path.basename(tempDockerYamlModule)}';`
+    ),
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    tempDockerYamlModule,
+    transpiledDockerYaml.outputText,
     'utf8'
   );
 
@@ -85,6 +110,7 @@ async function loadGeneratedGenerator(generatorTs) {
     );
   } finally {
     fs.unlinkSync(tempModule);
+    fs.unlinkSync(tempDockerYamlModule);
   }
 }
 
