@@ -66,6 +66,23 @@ function humanizeFeature(feature) {
 }
 
 function colourForRule(name) {
+    const dockerColours = {
+        compose: "#7C3AED",
+        service: "#2563EB",
+        build: "#EA580C",
+        restart: "#10B981",
+        healthcheck: "#DB2777",
+        dependency: "#F97316",
+        networkref: "#0891B2",
+        network: "#06B6D4",
+        port: "#EF4444",
+        environment: "#8B5CF6",
+        volume: "#0D9488"
+    };
+    const dockerColour = dockerColours[name.toLowerCase()];
+    if (dockerColour)
+        return dockerColour;
+
     let hash = 0;
     for (const ch of name)
         hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
@@ -232,7 +249,7 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
                 text: "."
             }
         ];
-        block.colour = 35;
+        block.colour = colourForRule(rule.name);
         block.output = "build";
 
         return block;
@@ -272,7 +289,7 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
                 value: 3
             }
         ];
-        block.colour = 120;
+        block.colour = colourForRule(rule.name);
         block.output = "healthcheck";
 
         return block;
@@ -292,7 +309,7 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
                 ]
             }
         ];
-        block.colour = 200;
+        block.colour = colourForRule(rule.name);
         block.output = "restart";
 
         return block;
@@ -308,7 +325,7 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
                 text: "backend"
             }
         ];
-        block.colour = 190;
+        block.colour = colourForRule(rule.name);
 
         const stackType = stackTypes.get(ruleLower);
         if (stackType) {
@@ -337,7 +354,7 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
                 text: "bridge"
             }
         ];
-        block.colour = 175;
+        block.colour = colourForRule(rule.name);
 
         const stackType = stackTypes.get(ruleLower);
         if (stackType) {
@@ -358,7 +375,7 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
                 text: "db"
             }
         ];
-        block.colour = 210;
+        block.colour = colourForRule(rule.name);
 
         const stackType = stackTypes.get(ruleLower);
         if (stackType) {
@@ -387,7 +404,7 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
                 text: "production"
             }
         ];
-        block.colour = 285;
+        block.colour = colourForRule(rule.name);
 
         const stackType = stackTypes.get(ruleLower);
         if (stackType) {
@@ -416,7 +433,7 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
                 text: "/app/data"
             }
         ];
-        block.colour = 155;
+        block.colour = colourForRule(rule.name);
 
         const stackType = stackTypes.get(ruleLower);
         if (stackType) {
@@ -739,11 +756,34 @@ export function generateMainTs(irRules) {
     }
 
     if (dockerRules.length) {
-        toolboxCategories.push({
-            name: "Docker",
-            colour: "230",
-            blocks: dockerRules.map(r => r.name.toLowerCase())
-        });
+        const dockerRuleNames = new Set(dockerRules.map(r => r.name.toLowerCase()));
+        const structureBlocks = ["compose", "service", "network"].filter(type => dockerRuleNames.has(type));
+        const serviceConfigurationBlocks = [
+            "build",
+            "port",
+            "environment",
+            "volume",
+            "dependency",
+            "networkref",
+            "restart",
+            "healthcheck"
+        ].filter(type => dockerRuleNames.has(type));
+
+        if (structureBlocks.length) {
+            toolboxCategories.push({
+                name: "Structure",
+                colour: "#7C3AED",
+                blocks: structureBlocks
+            });
+        }
+
+        if (serviceConfigurationBlocks.length) {
+            toolboxCategories.push({
+                name: "Service Configuration",
+                colour: "#0D9488",
+                blocks: serviceConfigurationBlocks
+            });
+        }
     }
 
     const toolboxJson = {

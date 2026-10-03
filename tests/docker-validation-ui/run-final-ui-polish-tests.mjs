@@ -39,6 +39,7 @@ function element() {
       contains(name) { return this.values.has(name); }
     },
     appendChild(child) { this.children.push(child); return child; },
+    get lastElementChild() { return this.children.at(-1) ?? null; },
     replaceChildren() { this.children = []; this.textContent = ''; },
     addEventListener(type, handler) { this.listeners[type] = handler; },
     click() { this.clicked = true; },
@@ -51,9 +52,11 @@ function textContentDeep(node) {
 }
 
 function validationMessages() {
-  return elements.errorOutput.children.map(child => {
+  return elements.errorOutput.children
+    .filter(child => child.className === 'validation-error')
+    .map(child => {
     const message = child.children?.[1]?.children?.find(grandchild =>
-      grandchild.className === 'validation-error-message'
+      grandchild.className === 'validation-error-title'
     );
     return message?.textContent ?? textContentDeep(child);
   });
@@ -67,7 +70,16 @@ const ids = [
   'exampleSelect', 'loadExample', 'validateWorkspace', 'clearWorkspace', 'copyYaml', 'downloadYaml'
 ];
 const elements = Object.fromEntries(ids.map(id => [id, element()]));
-elements.copyYaml.textContent = '⧉ Copy YAML';
+elements.copyYaml.textContent = 'Copy';
+const paletteItems = [
+  'compose', 'service', 'network', 'service', 'build', 'port',
+  'environment', 'volume', 'dependency', 'networkref', 'restart', 'healthcheck'
+].map(type => {
+  const item = element();
+  item.dataset = { blockType: type };
+  return item;
+});
+paletteItems[3].dataset.paletteFeature = 'image';
 const workspace = new Blockly.Workspace();
 workspace.scroll = () => {};
 const anchors = [];
@@ -86,6 +98,9 @@ const context = vm.createContext({
   setTimeout(callback, delay) { timers.push({ callback, delay }); },
   document: {
     getElementById: id => elements[id], body: element(),
+    querySelectorAll(selector) {
+      return selector === '[data-block-type]' ? paletteItems : [];
+    },
     createElement(tag) {
       const node = element();
       if (tag === 'a') anchors.push(node);
@@ -155,16 +170,22 @@ try {
     'Example selector exposes the polished demo examples'
   );
   assert.equal(elements.exampleSelect.value, 'simple-web-service');
-  assert.equal(elements.codeOutput.textContent, '', 'Initial output is empty YAML');
-  assert.equal(elements.yamlStatus.textContent, 'Waiting for configuration');
+  assert.equal(elements.codeOutput.textContent, 'services:\n', 'Initial Compose root emits the services header');
+  assert.equal(elements.yamlStatus.textContent, 'Incomplete configuration');
   assert.equal(elements.summaryServices.textContent, '0');
   assert.equal(elements.summaryEmpty.hidden, false);
   assert.equal(elements.summaryServicesItem.hidden, true);
-  assert.equal(validationText(), 'No configuration to validate yet.');
+  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'compose').length, 1);
+  assert.match(validationText(), /No configuration to validate yet/);
+  assert.match(validationText(), /Add a Service block/);
   assert.equal(validationText().includes('Ports valid'), false, 'Empty workspace does not show unrelated green validation');
+  const initialCompose = workspace
+    .getAllBlocks(false)
+    .find(block => block.type === 'compose');
   const invalid = workspace.newBlock('service');
   invalid.setFieldValue('', 'NAME');
   invalid.setFieldValue('', 'IMAGE');
+  initialCompose.getInput('SERVICES').connection.connect(invalid.previousConnection);
   invalid.lastValidationWarning = undefined;
   invalid.setWarningText = (text, id) => {
     if (id === 'captured-validation-error') {
@@ -172,7 +193,7 @@ try {
     }
   };
   vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children[0].className, 'validation-error');
+  assert.equal(elements.errorOutput.children[0].className, 'validation-error-summary');
   assert.deepEqual(validationMessages(), [
     'Service name is required.',
     'Service requires an image or build configuration.'
@@ -186,18 +207,21 @@ try {
   vm.runInContext('app.handleWorkspaceChange()', context);
   assert.equal(invalid.lastValidationWarning, null);
   assert.equal(elements.yamlStatus.textContent, 'Valid Compose');
-  assert.equal(validationText().includes('Service configuration valid'), true);
+  assert.equal(validationText().includes('No errors found.'), true);
   assert.equal(validationText().includes('Ports valid'), false, 'No ports means no Ports valid row');
   click('clearWorkspace');
-  assert.equal(workspace.getAllBlocks(false).length, 0);
-  assert.equal(elements.codeOutput.textContent, '');
-  assert.equal(elements.yamlStatus.textContent, 'Waiting for configuration');
+  assert.equal(workspace.getAllBlocks(false).length, 1);
+  assert.equal(elements.codeOutput.textContent, 'services:\n');
+  assert.equal(elements.yamlStatus.textContent, 'Incomplete configuration');
   assert.equal(elements.summaryEmpty.hidden, false);
   clean();
   // A queued Blockly event must not bring cleared errors back.
   vm.runInContext('app.handleWorkspaceChange()', context);
   clean();
-  const compose = workspace.newBlock('compose');
+  click('clearWorkspace');
+  const compose = workspace
+    .getAllBlocks(false)
+    .find(block => block.type === 'compose');
   const duplicateA = workspace.newBlock('service');
   const duplicateB = workspace.newBlock('service');
   duplicateA.setFieldValue('web', 'NAME');
@@ -215,7 +239,7 @@ try {
     };
   }
   vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 2, 'Duplicate service names render both errors');
+  assert.equal(elements.errorOutput.children.length, 3, 'Duplicate service names render summary plus both errors');
   assert.deepEqual(validationMessages(), ['Duplicate service name "web".', 'Duplicate service name "web".']);
   assert.equal(duplicateA.lastValidationWarning, 'Duplicate service name "web".');
   assert.equal(duplicateB.lastValidationWarning, 'Duplicate service name "web".');
@@ -235,7 +259,7 @@ try {
     }
   };
   vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 1, 'Dependency validation renders one error');
+  assert.equal(elements.errorOutput.children.length, 2, 'Dependency validation renders summary plus one error');
   assert.deepEqual(validationMessages(), ['Unknown dependency service "missing-service".']);
   assert.equal(dependency.lastValidationWarning, 'Unknown dependency service "missing-service".');
   dependency.setFieldValue('api', 'TARGET');
@@ -252,7 +276,7 @@ try {
     }
   };
   vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 1, 'Network validation renders one error');
+  assert.equal(elements.errorOutput.children.length, 2, 'Network validation renders summary plus one error');
   assert.deepEqual(validationMessages(), ['Unknown network "missing-network".']);
   assert.equal(networkRef.lastValidationWarning, 'Unknown network "missing-network".');
   const network = workspace.newBlock('network');
@@ -275,7 +299,7 @@ try {
     }
   };
   vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 1, 'Healthcheck validation renders one error');
+  assert.equal(elements.errorOutput.children.length, 2, 'Healthcheck validation renders summary plus one error');
   assert.deepEqual(validationMessages(), ['Healthcheck command is required.']);
   assert.equal(healthcheck.lastValidationWarning, 'Healthcheck command is required.');
   healthcheck.setFieldValue('curl -f http://localhost || exit 1', 'COMMAND');
@@ -292,7 +316,7 @@ try {
     }
   };
   vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 1, 'Build validation renders one error');
+  assert.equal(elements.errorOutput.children.length, 2, 'Build validation renders summary plus one error');
   assert.deepEqual(validationMessages(), ['Build context is required.']);
   assert.equal(build.lastValidationWarning, 'Build context is required.');
   build.setFieldValue('.', 'CONTEXT');
@@ -318,8 +342,9 @@ try {
     assert.equal(elements.summaryDependenciesItem.hidden, true);
     assert.equal(elements.summaryHealthchecksItem.hidden, true);
     assert.equal(elements.yamlStatus.textContent, 'Valid Compose');
-    assert.equal(validationText().includes('Service configuration valid'), true);
-    assert.equal(validationText().includes('Ports valid'), true);
+    assert.equal(validationText().includes('No errors found.'), true);
+    assert.equal(validationText().includes('Your Docker Compose configuration is valid.'), true);
+    assert.equal(validationText().includes('Ports valid'), false);
     assert.equal(validationText().includes('Dependencies valid'), false);
     assert.equal(validationText().includes('Healthcheck valid'), false);
     clean();
@@ -339,11 +364,13 @@ try {
   assert.equal(elements.summaryDependenciesItem.hidden, false);
   assert.equal(elements.summaryHealthchecksItem.hidden, false);
   assert.equal(elements.yamlStatus.textContent, 'Valid Compose');
-  assert.equal(validationText().includes('Build settings valid'), true);
-  assert.equal(validationText().includes('Dependencies valid'), true);
-  assert.equal(validationText().includes('Networks valid'), true);
-  assert.equal(validationText().includes('Healthcheck valid'), true);
-  assert.equal(validationText().includes('Volumes valid'), true);
+  assert.equal(validationText().includes('No errors found.'), true);
+  assert.equal(validationText().includes('Your Docker Compose configuration is valid.'), true);
+  assert.equal(validationText().includes('Build settings valid'), false);
+  assert.equal(validationText().includes('Dependencies valid'), false);
+  assert.equal(validationText().includes('Networks valid'), false);
+  assert.equal(validationText().includes('Healthcheck valid'), false);
+  assert.equal(validationText().includes('Volumes valid'), false);
   for (const expectedSection of multiExpectedSections) {
     assert.ok(
       elements.codeOutput.textContent.includes(expectedSection),
@@ -353,22 +380,30 @@ try {
   clean();
   click('validateWorkspace');
   assert.equal(elements.actionStatus.textContent, 'Workspace validation passed.');
-  for (const yaml of [elements.codeOutput.textContent, '']) {
-    if (!yaml) click('clearWorkspace');
-    await click('copyYaml');
-    assert.equal(copied, yaml, 'Copy preserves all YAML content');
-    assert.equal(elements.copyYaml.textContent, '✓ Copied');
-    assert.equal(timers.at(-1).delay, 1400, 'Copy feedback resets after a short delay');
-    timers.pop().callback();
-    assert.match(elements.copyYaml.textContent, /Copy YAML/);
-    click('downloadYaml');
-    assert.equal(await downloads.at(-1).text(), yaml, 'Download preserves all YAML content');
-    assert.equal(anchors.at(-1).download, 'docker-compose.yml');
-    assert.equal(anchors.at(-1).href, 'blob:yaml');
-    assert.ok(anchors.at(-1).clicked && anchors.at(-1).removed);
-    timers.shift().callback();
-    assert.equal(revoked.at(-1), 'blob:yaml');
-  }
+  const validYaml = elements.codeOutput.textContent;
+  await click('copyYaml');
+  assert.equal(copied, validYaml, 'Copy preserves valid YAML content');
+  assert.equal(elements.copyYaml.textContent, '✓ Copied');
+  assert.equal(timers.at(-1).delay, 1400, 'Copy feedback resets after a short delay');
+  timers.pop().callback();
+  assert.match(elements.copyYaml.textContent, /Copy/);
+  click('downloadYaml');
+  assert.equal(await downloads.at(-1).text(), validYaml, 'Download preserves valid YAML content');
+  assert.equal(anchors.at(-1).download, 'docker-compose.yml');
+  assert.equal(anchors.at(-1).href, 'blob:yaml');
+  assert.ok(anchors.at(-1).clicked && anchors.at(-1).removed);
+  timers.shift().callback();
+  assert.equal(revoked.at(-1), 'blob:yaml');
+
+  click('clearWorkspace');
+  const clearedYaml = elements.codeOutput.textContent;
+  await click('copyYaml');
+  assert.equal(copied, clearedYaml, 'Copy preserves cleared initial YAML content');
+  assert.equal(elements.copyYaml.textContent, '✓ Copied');
+  timers.pop().callback();
+  click('downloadYaml');
+  assert.equal(await downloads.at(-1).text(), clearedYaml, 'Download preserves cleared initial YAML content');
+  timers.shift().callback();
   navigator.clipboard.writeText = async () => { throw new Error('Permission denied'); };
   await click('copyYaml');
   assert.match(elements.actionStatus.textContent, /Could not copy YAML/);
@@ -378,12 +413,21 @@ try {
   clean();
   const html = read('blockly_app/index.html');
   for (const [id, label] of [['exampleSelect', 'Example'], ['loadExample', 'Load Example'], ['validateWorkspace', 'Validate'], ['clearWorkspace', 'Clear'],
-    ['copyYaml', 'Copy YAML'], ['downloadYaml', 'Download YAML']]) {
+    ['copyYaml', 'Copy'], ['downloadYaml', 'Download']]) {
     assert.ok(html.includes(`id="${id}"`));
     assert.ok(html.includes(label));
   }
-  assert.equal((html.match(/id="copyYaml"/g) ?? []).length, 1, 'Copy YAML appears once');
-  assert.equal((html.match(/id="downloadYaml"/g) ?? []).length, 1, 'Download YAML appears once');
+  for (const label of [
+    'Structure', 'Service Configuration', 'Compose', 'Service', 'Network',
+    'Image', 'Build', 'Ports', 'Environment', 'Volumes', 'Depends On',
+    'Networks', 'Restart', 'Healthcheck'
+  ]) {
+    assert.ok(html.includes(label), `Palette includes ${label}`);
+  }
+  assert.equal(html.includes('name": "Docker"'), false, 'Generated generic Docker category is absent from app HTML');
+  assert.equal((html.match(/data-block-type=/g) ?? []).length, 12, 'Palette exposes every supported block action');
+  assert.equal((html.match(/id="copyYaml"/g) ?? []).length, 1, 'Copy appears once');
+  assert.equal((html.match(/id="downloadYaml"/g) ?? []).length, 1, 'Download appears once');
   assert.ok(html.includes('Docker-Blocks'));
   assert.ok(html.includes('Visual Docker Compose Generator'));
   assert.ok(html.includes('docker-compose.yml'));

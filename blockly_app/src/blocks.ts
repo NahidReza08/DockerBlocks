@@ -24,7 +24,7 @@ export function defineBlocks() {
           }
         ],
         "message4": "}",
-        "colour": 82
+        "colour": "#7C3AED"
       },
       {
         "type": "service",
@@ -109,7 +109,7 @@ export function defineBlocks() {
             "check": "volume"
           }
         ],
-        "colour": 269,
+        "colour": "#2563EB",
         "previousStatement": "service",
         "nextStatement": "service"
       },
@@ -124,7 +124,7 @@ export function defineBlocks() {
             "text": "db"
           }
         ],
-        "colour": 210,
+        "colour": "#F97316",
         "previousStatement": "dependency",
         "nextStatement": "dependency"
       },
@@ -139,7 +139,7 @@ export function defineBlocks() {
             "text": "."
           }
         ],
-        "colour": 35,
+        "colour": "#EA580C",
         "output": "build"
       },
       {
@@ -169,7 +169,7 @@ export function defineBlocks() {
             ]
           }
         ],
-        "colour": 200,
+        "colour": "#10B981",
         "output": "restart"
       },
       {
@@ -207,7 +207,7 @@ export function defineBlocks() {
             "value": 3
           }
         ],
-        "colour": 120,
+        "colour": "#DB2777",
         "output": "healthcheck"
       },
       {
@@ -221,7 +221,7 @@ export function defineBlocks() {
             "text": "backend"
           }
         ],
-        "colour": 190,
+        "colour": "#0891B2",
         "previousStatement": "networkref",
         "nextStatement": "networkref"
       },
@@ -244,7 +244,7 @@ export function defineBlocks() {
             "text": "bridge"
           }
         ],
-        "colour": 175,
+        "colour": "#06B6D4",
         "previousStatement": "network",
         "nextStatement": "network"
       },
@@ -263,7 +263,7 @@ export function defineBlocks() {
             "value": 0
           }
         ],
-        "colour": 241,
+        "colour": "#EF4444",
         "previousStatement": "port",
         "nextStatement": "port"
       },
@@ -286,7 +286,7 @@ export function defineBlocks() {
             "text": "production"
           }
         ],
-        "colour": 285,
+        "colour": "#8B5CF6",
         "previousStatement": "environment",
         "nextStatement": "environment"
       },
@@ -309,7 +309,7 @@ export function defineBlocks() {
             "text": "/app/data"
           }
         ],
-        "colour": 155,
+        "colour": "#0D9488",
         "previousStatement": "volume",
         "nextStatement": "volume"
       }

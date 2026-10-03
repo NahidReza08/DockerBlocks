@@ -4,55 +4,6 @@ import type { UiValidationError } from './app-types';
 
 const VALIDATION_WARNING_ID = 'captured-validation-error';
 
-type ValidationGroup = {
-  blockTypes: string[];
-  message: string;
-  title: string;
-};
-
-const SUCCESS_GROUPS: ValidationGroup[] = [
-  {
-    blockTypes: ['service'],
-    title: 'Service configuration valid',
-    message: 'Service names are unique and each service has image or build configuration.'
-  },
-  {
-    blockTypes: ['port'],
-    title: 'Ports valid',
-    message: 'Port mappings are valid.'
-  },
-  {
-    blockTypes: ['dependency'],
-    title: 'Dependencies valid',
-    message: 'Service dependencies reference existing services.'
-  },
-  {
-    blockTypes: ['network', 'networkref'],
-    title: 'Networks valid',
-    message: 'Network declarations and references are valid.'
-  },
-  {
-    blockTypes: ['healthcheck'],
-    title: 'Healthcheck valid',
-    message: 'Healthcheck configuration is valid.'
-  },
-  {
-    blockTypes: ['build'],
-    title: 'Build settings valid',
-    message: 'Build context is valid.'
-  },
-  {
-    blockTypes: ['environment'],
-    title: 'Environment valid',
-    message: 'Environment entries use valid keys.'
-  },
-  {
-    blockTypes: ['volume'],
-    title: 'Volumes valid',
-    message: 'Volume mappings have source and target values.'
-  }
-];
-
 function createTextElement(
   className: string,
   text: string
@@ -61,6 +12,19 @@ function createTextElement(
   element.className = className;
   element.textContent = text;
   return element;
+}
+
+function getServiceLabel(workspace: Blockly.Workspace, blockId?: string): string | null {
+  if (!blockId) return null;
+
+  const block = workspace.getBlockById(blockId);
+  if (!block) return null;
+
+  const serviceBlock = block.type === 'service' ? block : block.getSurroundParent();
+  if (!serviceBlock || serviceBlock.type !== 'service') return null;
+
+  const name = String(serviceBlock.getFieldValue('NAME') ?? '').trim();
+  return name ? 'Service (' + name + ')' : 'Service';
 }
 
 function createValidationErrorElement(error: UiValidationError): HTMLElement {
@@ -77,13 +41,8 @@ function createValidationErrorElement(error: UiValidationError): HTMLElement {
 
   const title = document.createElement('div');
   title.className = 'validation-error-title';
-  title.textContent = 'Validation issue';
+  title.textContent = error.message;
   body.appendChild(title);
-
-  const message = document.createElement('div');
-  message.className = 'validation-error-message';
-  message.textContent = error.message;
-  body.appendChild(message);
 
   const details: string[] = [];
 
@@ -95,10 +54,6 @@ function createValidationErrorElement(error: UiValidationError): HTMLElement {
     }
 
     details.push(location);
-  }
-
-  if (error.blockId !== undefined) {
-    details.push('Block: ' + error.blockId);
   }
 
   if (details.length > 0) {
@@ -137,32 +92,26 @@ function showNoValidationErrors(
 
   errorOutput.replaceChildren();
 
-  const blocks = workspace.getAllBlocks(false);
+  const hasService = workspace
+    .getAllBlocks(false)
+    .some((block) => block.type === 'service');
 
-  if (blocks.length === 0) {
+  if (!hasService) {
     const empty = document.createElement('div');
     empty.className = 'validation-empty';
-    empty.textContent = 'No configuration to validate yet.';
+    empty.appendChild(createTextElement('validation-empty-title', 'No configuration to validate yet.'));
+    empty.appendChild(createTextElement(
+      'validation-empty-message',
+      'Add a Service block to create a valid Docker Compose configuration.'
+    ));
     errorOutput.appendChild(empty);
     return;
   }
 
-  const blockTypes = new Set(blocks.map((block) => block.type));
-  const relevantGroups = SUCCESS_GROUPS.filter((group) =>
-    group.blockTypes.some((type) => blockTypes.has(type))
-  );
-
-  if (relevantGroups.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'validation-empty';
-    empty.textContent = 'Add a Service block to validate a Docker Compose configuration.';
-    errorOutput.appendChild(empty);
-    return;
-  }
-
-  relevantGroups.forEach((group) => {
-    errorOutput.appendChild(createValidationCheckElement(group.title, group.message));
-  });
+  errorOutput.appendChild(createValidationCheckElement(
+    'No errors found.',
+    'Your Docker Compose configuration is valid.'
+  ));
 }
 
 function showCapturedValidationErrors(
@@ -179,8 +128,23 @@ function showCapturedValidationErrors(
     return;
   }
 
+  const summary = document.createElement('div');
+  summary.className = 'validation-error-summary';
+  summary.textContent = validationErrors.length + ' validation ' +
+    (validationErrors.length === 1 ? 'error' : 'errors');
+  errorOutput.appendChild(summary);
+
   validationErrors.forEach((error) => {
+    const serviceLabel = getServiceLabel(workspace, error.blockId);
     errorOutput.appendChild(createValidationErrorElement(error));
+    const lastError = errorOutput.lastElementChild;
+
+    if (serviceLabel && lastError) {
+      const body = lastError.children[1];
+      if (body) {
+        body.appendChild(createTextElement('validation-error-location', 'Block: ' + serviceLabel));
+      }
+    }
   });
 }
 

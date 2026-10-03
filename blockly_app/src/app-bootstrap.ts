@@ -18,17 +18,20 @@ type BootstrapOptions = {
   validationErrors: UiValidationError[];
 };
 
+type UiState = 'empty' | 'incomplete' | 'valid' | 'invalid';
+
 export function bootstrapBlocklyApp({
   toolbox,
   generator,
   validationErrors
 }: BootstrapOptions) {
+  void toolbox;
+
   const workspace = Blockly.inject('blocklyDiv', {
-    toolbox,
     grid: {
       spacing: 20,
       length: 2,
-      colour: '#cfe3f5',
+      colour: 'rgba(148, 163, 184, 0.45)',
       snap: false
     },
     zoom: {
@@ -42,6 +45,7 @@ export function bootstrapBlocklyApp({
     trashcan: true
   });
   const codeOutput = document.getElementById('codeOutput');
+  const lineNumbers = document.getElementById('lineNumbers');
   const errorOutput = document.getElementById('errorOutput');
   const actionStatus = document.getElementById('actionStatus');
   const yamlStatus = document.getElementById('yamlStatus');
@@ -72,6 +76,7 @@ export function bootstrapBlocklyApp({
 
   function getBlockCounts() {
     const counts = {
+      compose: 0,
       service: 0,
       network: 0,
       dependency: 0,
@@ -80,6 +85,7 @@ export function bootstrapBlocklyApp({
     };
 
     workspace.getAllBlocks(false).forEach((block) => {
+      if (block.type === 'compose') counts.compose += 1;
       if (block.type === 'service') counts.service += 1;
       if (block.type === 'network') counts.network += 1;
       if (block.type === 'dependency') counts.dependency += 1;
@@ -91,33 +97,45 @@ export function bootstrapBlocklyApp({
   }
 
   function hasMeaningfulComposeConfiguration() {
-    return getBlockCounts().service > 0;
+    const counts = getBlockCounts();
+    return counts.compose > 0 && counts.service > 0;
   }
 
-  function updateYamlStatus(errors: UiValidationError[], code: string) {
+  function deriveUiState(errors: UiValidationError[], code: string): UiState {
+    if (!hasMeaningfulComposeConfiguration()) {
+      return workspace.getAllBlocks(false).length === 0 ? 'empty' : 'incomplete';
+    }
+
+    if (!code.trim()) return 'incomplete';
+    if (errors.length > 0) return 'invalid';
+    return 'valid';
+  }
+
+  function updateYamlStatus(state: UiState) {
     if (!yamlStatus) return;
 
-    yamlStatus.classList.remove('invalid', 'neutral');
+    yamlStatus.classList.remove('invalid', 'neutral', 'incomplete', 'valid');
 
-    if (workspace.getAllBlocks(false).length === 0) {
+    if (state === 'empty') {
       yamlStatus.textContent = 'Waiting for configuration';
       yamlStatus.classList.add('neutral');
       return;
     }
 
-    if (!code.trim() || !hasMeaningfulComposeConfiguration()) {
+    if (state === 'incomplete') {
       yamlStatus.textContent = 'Incomplete configuration';
-      yamlStatus.classList.add('neutral');
+      yamlStatus.classList.add('incomplete');
       return;
     }
 
-    if (errors.length > 0) {
+    if (state === 'invalid') {
       yamlStatus.textContent = 'Validation errors';
       yamlStatus.classList.add('invalid');
       return;
     }
 
     yamlStatus.textContent = 'Valid Compose';
+    yamlStatus.classList.add('valid');
   }
 
   function updateWorkspaceSummary() {
@@ -140,20 +158,42 @@ export function bootstrapBlocklyApp({
     if (emptySummary) emptySummary.hidden = visibleCount > 0;
   }
 
-  function openInitialToolboxCategory() {
+  function addPaletteBlock(blockType: string, feature?: string) {
     try {
-      const workspaceSvg = workspace as Blockly.WorkspaceSvg;
-      const toolbox = workspaceSvg.getToolbox?.();
-      const toolboxWithItems = toolbox as typeof toolbox & {
-        getToolboxItems?: () => unknown[];
-      };
-      const firstItem = toolboxWithItems?.getToolboxItems?.()[0];
+      const block = workspace.newBlock(blockType);
 
-      if (firstItem && !toolbox?.getSelectedItem?.()) {
-        toolbox?.setSelectedItem(firstItem as Blockly.IToolboxItem);
+      if (blockType === 'service' && feature === 'image') {
+        block.setFieldValue('web', 'NAME');
+        block.setFieldValue('nginx:latest', 'IMAGE');
       }
+
+      (workspace as Blockly.Workspace & { scroll?: (x: number, y: number) => void }).scroll?.(0, 0);
+      block.initSvg?.();
+      block.render?.();
+      block.moveBy(48, 48 + workspace.getAllBlocks(false).length * 12);
+      const composeBlock = workspace
+        .getAllBlocks(false)
+        .find((candidate) => candidate.type === 'compose');
+
+      if (composeBlock && block.type === 'service' && block.previousConnection) {
+        const servicesInput = composeBlock.getInput('SERVICES')?.connection;
+        if (servicesInput && !servicesInput.targetConnection) {
+          servicesInput.connect(block.previousConnection);
+        }
+      }
+
+      if (composeBlock && block.type === 'network' && block.previousConnection) {
+        const networksInput = composeBlock.getInput('NETWORKS')?.connection;
+        if (networksInput && !networksInput.targetConnection) {
+          networksInput.connect(block.previousConnection);
+        }
+      }
+
+      block.select();
+      (workspace as Blockly.WorkspaceSvg).centerOnBlock?.(block.id);
+      handleWorkspaceChange();
     } catch {
-      // Headless tests do not render a Blockly toolbox.
+      // Headless tests may not provide rendered block methods.
     }
   }
 
@@ -172,6 +212,10 @@ export function bootstrapBlocklyApp({
       if (codeOutput) {
         codeOutput.textContent = code;
       }
+      if (lineNumbers) {
+        const lineCount = Math.max(1, code.split('\n').length - (code.endsWith('\n') ? 1 : 0));
+        lineNumbers.textContent = Array.from({ length: lineCount }, (_, index) => String(index + 1)).join('\n');
+      }
       return code;
     } catch (error) {
       validationUi.showGenerationError(error);
@@ -182,8 +226,9 @@ export function bootstrapBlocklyApp({
   function handleWorkspaceChange(_event?: Blockly.Events.Abstract) {
     const code = generateCode();
     const errors = collectValidationErrors();
+    const state = deriveUiState(errors, code);
     validationUi.refresh(errors);
-    updateYamlStatus(errors, code);
+    updateYamlStatus(state);
     updateWorkspaceSummary();
     resizeWorkspace();
   }
@@ -210,8 +255,22 @@ export function bootstrapBlocklyApp({
 
   function clearWorkspace() {
     workspace.clear();
+    createInitialComposeRoot();
     handleWorkspaceChange();
     showActionStatus('');
+  }
+
+  function createInitialComposeRoot() {
+    if (workspace.getAllBlocks(false).length > 0) return;
+
+    try {
+      const block = workspace.newBlock('compose');
+      block.initSvg?.();
+      block.render?.();
+      block.moveBy(360, 96);
+    } catch {
+      // Headless tests may not provide rendered block methods.
+    }
   }
 
   function loadExample() {
@@ -226,7 +285,7 @@ export function bootstrapBlocklyApp({
   function validateWorkspace() {
     handleWorkspaceChange();
     showActionStatus(
-      validationUi.currentErrors.length === 0
+      deriveUiState(validationUi.currentErrors, codeOutput?.textContent ?? '') === 'valid'
         ? 'Workspace validation passed.'
         : 'Validation errors found.'
     );
@@ -236,7 +295,7 @@ export function bootstrapBlocklyApp({
     try {
       await navigator.clipboard.writeText(generator.workspaceToCode(workspace));
       if (copyYamlButton) {
-        const previousText = copyYamlButton.textContent || '⧉ Copy YAML';
+        const previousText = copyYamlButton.textContent || 'Copy';
         copyYamlButton.textContent = '✓ Copied';
         setTimeout(() => {
           copyYamlButton.textContent = previousText;
@@ -274,12 +333,20 @@ export function bootstrapBlocklyApp({
   document.getElementById('clearWorkspace')?.addEventListener('click', clearWorkspace);
   document.getElementById('copyYaml')?.addEventListener('click', copyYaml);
   document.getElementById('downloadYaml')?.addEventListener('click', downloadYaml);
+  document.querySelectorAll<HTMLElement>('[data-block-type]').forEach((item) => {
+    item.addEventListener('click', () => {
+      const blockType = item.dataset.blockType;
+      if (!blockType) return;
+
+      addPaletteBlock(blockType, item.dataset.paletteFeature);
+    });
+  });
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', resizeWorkspace);
   }
 
+  createInitialComposeRoot();
   handleWorkspaceChange();
-  openInitialToolboxCategory();
 
   return {
     workspace,

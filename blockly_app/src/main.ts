@@ -11,8 +11,8 @@ bootstrapBlocklyApp({
   "contents": [
     {
       "kind": "category",
-      "name": "Docker",
-      "colour": "230",
+      "name": "Structure",
+      "colour": "#7C3AED",
       "contents": [
         {
           "kind": "block",
@@ -24,27 +24,18 @@ bootstrapBlocklyApp({
         },
         {
           "kind": "block",
-          "type": "dependency"
-        },
+          "type": "network"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "Service Configuration",
+      "colour": "#0D9488",
+      "contents": [
         {
           "kind": "block",
           "type": "build"
-        },
-        {
-          "kind": "block",
-          "type": "restart"
-        },
-        {
-          "kind": "block",
-          "type": "healthcheck"
-        },
-        {
-          "kind": "block",
-          "type": "networkref"
-        },
-        {
-          "kind": "block",
-          "type": "network"
         },
         {
           "kind": "block",
@@ -57,6 +48,22 @@ bootstrapBlocklyApp({
         {
           "kind": "block",
           "type": "volume"
+        },
+        {
+          "kind": "block",
+          "type": "dependency"
+        },
+        {
+          "kind": "block",
+          "type": "networkref"
+        },
+        {
+          "kind": "block",
+          "type": "restart"
+        },
+        {
+          "kind": "block",
+          "type": "healthcheck"
         }
       ]
     }
