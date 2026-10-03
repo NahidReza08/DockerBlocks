@@ -444,6 +444,144 @@ async function testComposeYamlGeneration() {
       dependsWorkspace.dispose();
     }
 
+    console.log('Testing Docker Compose network grammar and YAML...');
+
+    const oneNetworkDsl =
+      'compose {\n' +
+      '  service web {\n' +
+      '    image nginx\n' +
+      '    network backend\n' +
+      '  }\n' +
+      '  network backend driver bridge\n' +
+      '}\n';
+    const oneNetworkParse = grammarServices.parser.LangiumParser.parse(oneNetworkDsl);
+    assert.deepEqual(oneNetworkParse.lexerErrors, [], 'One network example should have no lexer errors');
+    assert.deepEqual(oneNetworkParse.parserErrors, [], 'One network example should parse');
+
+    const multiNetworkDsl =
+      'compose {\n' +
+      '  service web {\n' +
+      '    image nginx\n' +
+      '    network frontend\n' +
+      '    network backend\n' +
+      '  }\n' +
+      '  service api {\n' +
+      '    image node\n' +
+      '    network backend\n' +
+      '  }\n' +
+      '  network frontend\n' +
+      '  network backend driver bridge\n' +
+      '}\n';
+    const multiNetworkParse = grammarServices.parser.LangiumParser.parse(multiNetworkDsl);
+    assert.deepEqual(multiNetworkParse.lexerErrors, [], 'Multiple network example should have no lexer errors');
+    assert.deepEqual(multiNetworkParse.parserErrors, [], 'Multiple network example should parse');
+
+    const networkRefBlockDefinition = blockDefinitions.find((block) => block.type === 'networkref');
+    const networkBlockDefinition = blockDefinitions.find((block) => block.type === 'network');
+    assert.ok(networkRefBlockDefinition, 'Generated blocks should include network references');
+    assert.ok(networkBlockDefinition, 'Generated blocks should include top-level networks');
+    assert.equal(
+      networkRefBlockDefinition.previousStatement,
+      'networkref',
+      'NetworkRef block should be stackable only with networkref blocks'
+    );
+    assert.equal(
+      networkBlockDefinition.previousStatement,
+      'network',
+      'Network block should be stackable only with network blocks'
+    );
+
+    const networkWorkspace = new Blockly.Workspace();
+    try {
+      const networkCompose = networkWorkspace.newBlock('compose');
+      const web = networkWorkspace.newBlock('service');
+      const api = networkWorkspace.newBlock('service');
+      web.setFieldValue('web', 'NAME');
+      web.setFieldValue('nginx', 'IMAGE');
+      api.setFieldValue('api', 'NAME');
+      api.setFieldValue('node', 'IMAGE');
+      networkCompose.getInput('SERVICES').connection.connect(web.previousConnection);
+      web.nextConnection.connect(api.previousConnection);
+
+      const webBackend = networkWorkspace.newBlock('networkref');
+      webBackend.setFieldValue('backend', 'TARGET');
+      web.getInput('NETWORKS').connection.connect(webBackend.previousConnection);
+
+      const backendNetwork = networkWorkspace.newBlock('network');
+      backendNetwork.setFieldValue('backend', 'NAME');
+      backendNetwork.setFieldValue('bridge', 'DRIVER');
+      networkCompose.getInput('NETWORKS').connection.connect(backendNetwork.previousConnection);
+
+      const oneNetworkYaml = generator.workspaceToCode(networkWorkspace);
+      assert.equal(
+        oneNetworkYaml,
+        'services:\n' +
+        '  web:\n' +
+        '    image: nginx\n' +
+        '    networks:\n' +
+        '      - backend\n' +
+        '  api:\n' +
+        '    image: node\n' +
+        'networks:\n' +
+        '  backend:\n' +
+        '    driver: bridge\n',
+        'One Docker network should generate service references and a top-level network definition.'
+      );
+      assert.deepEqual(parse(oneNetworkYaml), {
+        services: {
+          web: { image: 'nginx', networks: ['backend'] },
+          api: { image: 'node' }
+        },
+        networks: {
+          backend: { driver: 'bridge' }
+        }
+      });
+
+      const webFrontend = networkWorkspace.newBlock('networkref');
+      webFrontend.setFieldValue('frontend', 'TARGET');
+      webBackend.nextConnection.connect(webFrontend.previousConnection);
+      const apiBackend = networkWorkspace.newBlock('networkref');
+      apiBackend.setFieldValue('backend', 'TARGET');
+      api.getInput('NETWORKS').connection.connect(apiBackend.previousConnection);
+      const frontendNetwork = networkWorkspace.newBlock('network');
+      frontendNetwork.setFieldValue('frontend', 'NAME');
+      frontendNetwork.setFieldValue('', 'DRIVER');
+      backendNetwork.nextConnection.connect(frontendNetwork.previousConnection);
+
+      const multiNetworkYaml = generator.workspaceToCode(networkWorkspace);
+      assert.equal(
+        multiNetworkYaml,
+        'services:\n' +
+        '  web:\n' +
+        '    image: nginx\n' +
+        '    networks:\n' +
+        '      - backend\n' +
+        '      - frontend\n' +
+        '  api:\n' +
+        '    image: node\n' +
+        '    networks:\n' +
+        '      - backend\n' +
+        'networks:\n' +
+        '  backend:\n' +
+        '    driver: bridge\n' +
+        '  frontend:\n',
+        'Multiple Docker network references and definitions should preserve stack order.'
+      );
+      assert.deepEqual(parse(multiNetworkYaml), {
+        services: {
+          web: { image: 'nginx', networks: ['backend', 'frontend'] },
+          api: { image: 'node', networks: ['backend'] }
+        },
+        networks: {
+          backend: { driver: 'bridge' },
+          frontend: null
+        }
+      });
+      console.log('✓ network grammar and YAML generated');
+    } finally {
+      networkWorkspace.dispose();
+    }
+
     console.log('Testing one Docker Compose port mapping...');
 
     const onePortWorkspace = new Blockly.Workspace();

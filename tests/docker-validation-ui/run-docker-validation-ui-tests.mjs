@@ -34,6 +34,14 @@ function read(file) {
 }
 
 function assertDockerValidationRules(source, context) {
+  const networkValidation = source.match(/if \(block\.type === 'network'\) \{([\s\S]*?)\n    \}/)?.[1];
+  assert.ok(networkValidation, `${context}: validation inspects Network blocks`);
+  assert.ok(networkValidation.includes("getFieldValue('NAME')"), `${context}: Network NAME`);
+  assert.ok(networkValidation.includes('Network name is required.'), `${context}: Network name is required.`);
+  assert.ok(source.includes('Duplicate network name'), `${context}: duplicate Network names are rejected`);
+  assert.ok(source.includes("'networkref'"), `${context}: validation inspects NetworkRef blocks`);
+  assert.ok(source.includes('Unknown network'), `${context}: unknown NetworkRef targets are rejected`);
+  console.log(`[PASS] ${context}: Network and NetworkRef errors use the shared validator`);
   const volumeValidation = source.match(/if \(block\.type === 'volume'\) \{([\s\S]*?)\n    \}/)?.[1];
   assert.ok(volumeValidation, `${context}: validation inspects Volume blocks`);
   for (const field of ['SOURCE', 'TARGET']) {

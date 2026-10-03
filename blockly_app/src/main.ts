@@ -28,6 +28,14 @@ bootstrapBlocklyApp({
         },
         {
           "kind": "block",
+          "type": "networkref"
+        },
+        {
+          "kind": "block",
+          "type": "network"
+        },
+        {
+          "kind": "block",
           "type": "port"
         },
         {

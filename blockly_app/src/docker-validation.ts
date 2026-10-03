@@ -54,6 +54,7 @@ export function collectDockerValidationErrors(
 ): UiValidationError[] {
   const errors: UiValidationError[] = [];
   const serviceBlocksByName = new Map<string, Blockly.Block[]>();
+  const networkBlocksByName = new Map<string, Blockly.Block[]>();
 
   workspace.getAllBlocks(false).forEach((block) => {
     if (block.type === 'service') {
@@ -71,6 +72,19 @@ export function collectDockerValidationErrors(
 
       if (image.length === 0) {
         errors.push(requiredError('Image is required', block.id));
+      }
+    }
+
+    if (block.type === 'network') {
+      const rawName = String(block.getFieldValue('NAME') ?? '');
+      const name = trimFieldValue(rawName);
+
+      if (name.length === 0) {
+        errors.push(requiredError('Network name is required.', block.id));
+      } else {
+        const networkBlocks = networkBlocksByName.get(rawName) ?? [];
+        networkBlocks.push(block);
+        networkBlocksByName.set(rawName, networkBlocks);
       }
     }
 
@@ -127,6 +141,14 @@ export function collectDockerValidationErrors(
     });
   });
 
+  networkBlocksByName.forEach((blocks, name) => {
+    if (blocks.length < 2) return;
+
+    blocks.forEach((block) => {
+      errors.push(requiredError(`Duplicate network name "${name}".`, block.id));
+    });
+  });
+
   workspace.getAllBlocks(false).forEach((block) => {
     if (block.type !== 'dependency') return;
 
@@ -150,6 +172,22 @@ export function collectDockerValidationErrors(
 
     if (!serviceBlocksByName.has(rawTarget)) {
       errors.push(requiredError(`Unknown dependency service "${rawTarget}".`, block.id));
+    }
+  });
+
+  workspace.getAllBlocks(false).forEach((block) => {
+    if (block.type !== 'networkref') return;
+
+    const rawTarget = String(block.getFieldValue('TARGET') ?? '');
+    const target = trimFieldValue(rawTarget);
+
+    if (target.length === 0) {
+      errors.push(requiredError('Network name is required.', block.id));
+      return;
+    }
+
+    if (!networkBlocksByName.has(rawTarget)) {
+      errors.push(requiredError(`Unknown network "${rawTarget}".`, block.id));
     }
   });
 

@@ -15,7 +15,15 @@ export function defineBlocks() {
             "check": "service"
           }
         ],
-        "message3": "}",
+        "message3": "Networks: %1",
+        "args3": [
+          {
+            "type": "input_statement",
+            "name": "NETWORKS",
+            "check": "network"
+          }
+        ],
+        "message4": "}",
         "colour": 82
       },
       {
@@ -45,24 +53,32 @@ export function defineBlocks() {
             "check": "dependency"
           }
         ],
-        "message4": "Ports: %1",
+        "message4": "Networks: %1",
         "args4": [
+          {
+            "type": "input_statement",
+            "name": "NETWORKS",
+            "check": "networkref"
+          }
+        ],
+        "message5": "Ports: %1",
+        "args5": [
           {
             "type": "input_statement",
             "name": "PORTS",
             "check": "port"
           }
         ],
-        "message5": "Environment: %1",
-        "args5": [
+        "message6": "Environment: %1",
+        "args6": [
           {
             "type": "input_statement",
             "name": "ENVIRONMENT",
             "check": "environment"
           }
         ],
-        "message6": "Volumes: %1",
-        "args6": [
+        "message7": "Volumes: %1",
+        "args7": [
           {
             "type": "input_statement",
             "name": "VOLUMES",
@@ -87,6 +103,44 @@ export function defineBlocks() {
         "colour": 210,
         "previousStatement": "dependency",
         "nextStatement": "dependency"
+      },
+      {
+        "type": "networkref",
+        "message0": "network",
+        "message1": "Name: %1",
+        "args1": [
+          {
+            "type": "field_input",
+            "name": "TARGET",
+            "text": "backend"
+          }
+        ],
+        "colour": 190,
+        "previousStatement": "networkref",
+        "nextStatement": "networkref"
+      },
+      {
+        "type": "network",
+        "message0": "Network",
+        "message1": "Name: %1",
+        "args1": [
+          {
+            "type": "field_input",
+            "name": "NAME",
+            "text": "backend"
+          }
+        ],
+        "message2": "Driver: %1",
+        "args2": [
+          {
+            "type": "field_input",
+            "name": "DRIVER",
+            "text": "bridge"
+          }
+        ],
+        "colour": 175,
+        "previousStatement": "network",
+        "nextStatement": "network"
       },
       {
         "type": "port",

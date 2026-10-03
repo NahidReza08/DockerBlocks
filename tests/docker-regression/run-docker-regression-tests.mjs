@@ -189,6 +189,16 @@ try {
   );
 
   assert.ok(
+    dockerValidationSource.includes("block.type === 'network'"),
+    'Validation should inspect top-level Docker network blocks'
+  );
+
+  assert.ok(
+    dockerValidationSource.includes("'networkref'"),
+    'Validation should inspect service network reference blocks'
+  );
+
+  assert.ok(
     dockerValidationSource.includes("block.getFieldValue('IMAGE')"),
     'Validation should inspect the service IMAGE field'
   );
@@ -209,6 +219,11 @@ try {
   );
 
   assert.ok(
+    dockerValidationSource.includes("block.getFieldValue('TARGET')"),
+    'Validation should inspect reference TARGET fields'
+  );
+
+  assert.ok(
     dockerValidationSource.includes("Environment key is required."),
     'Missing Docker environment key should produce the required error'
   );
@@ -216,6 +231,16 @@ try {
   assert.ok(
     dockerValidationSource.includes("Environment key must start with a letter or underscore and contain only letters, numbers, and underscores."),
     'Invalid Docker environment key should produce the identifier error'
+  );
+
+  assert.ok(
+    dockerValidationSource.includes("Duplicate network name"),
+    'Duplicate Docker network names should produce a duplicate-name error'
+  );
+
+  assert.ok(
+    dockerValidationSource.includes("Unknown network"),
+    'Unknown Docker network references should produce an unknown-network error'
   );
 
   assert.ok(
@@ -481,6 +506,124 @@ try {
       console.log(`[PASS] ${context}: dependency validation responds to added, renamed and removed services`);
       dependency.dispose(true);
       assert.deepEqual(collectWorkspace(), [], `${context}: removing dependency block leaves existing validation clean`);
+
+      function assertDuplicateNetworkErrors(blocks, name) {
+        const errors = collectWorkspace();
+        const expected = blocks.map((block) => ({
+          type: 'validation',
+          message: `Duplicate network name "${name}".`,
+          severity: 'error',
+          blockId: block.id
+        })).sort((left, right) => left.blockId.localeCompare(right.blockId));
+        const actual = errors
+          .filter((error) => error.message === `Duplicate network name "${name}".`)
+          .sort((left, right) => left.blockId.localeCompare(right.blockId));
+
+        assert.deepEqual(
+          actual,
+          expected,
+          `${context}: every duplicate "${name}" network receives a duplicate-name error`
+        );
+      }
+
+      const backendNetwork = createBlock('network', { NAME: 'backend', DRIVER: 'bridge' });
+      compose.getInput('NETWORKS').connection.connect(backendNetwork.previousConnection);
+      const backendNetworkRef = createBlock('networkref', { TARGET: 'backend' });
+      frontend.service.getInput('NETWORKS').connection.connect(backendNetworkRef.previousConnection);
+      assert.deepEqual(collectWorkspace(), [], `${context}: valid service network reference validates cleanly`);
+      console.log(`[PASS] ${context}: valid network reference validates cleanly`);
+
+      backendNetworkRef.setFieldValue('missing-network', 'TARGET');
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === backendNetworkRef.id),
+        [{
+          type: 'validation',
+          message: 'Unknown network "missing-network".',
+          severity: 'error',
+          blockId: backendNetworkRef.id
+        }],
+        `${context}: unknown network target attaches to the network reference block`
+      );
+      backendNetworkRef.setFieldValue('backend', 'TARGET');
+      assert.deepEqual(collectWorkspace(), [], `${context}: fixing unknown network clears the error`);
+      console.log(`[PASS] ${context}: unknown network error clears after fixing target`);
+
+      backendNetworkRef.setFieldValue('', 'TARGET');
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === backendNetworkRef.id),
+        [{
+          type: 'validation',
+          message: 'Network name is required.',
+          severity: 'error',
+          blockId: backendNetworkRef.id
+        }],
+        `${context}: blank service network reference uses required-field validation`
+      );
+      backendNetworkRef.setFieldValue('backend', 'TARGET');
+      assert.deepEqual(collectWorkspace(), [], `${context}: required network reference error clears after correction`);
+
+      backendNetwork.setFieldValue('', 'NAME');
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === backendNetwork.id),
+        [{
+          type: 'validation',
+          message: 'Network name is required.',
+          severity: 'error',
+          blockId: backendNetwork.id
+        }],
+        `${context}: blank top-level network name uses required-field validation`
+      );
+      backendNetwork.setFieldValue('backend', 'NAME');
+      assert.deepEqual(collectWorkspace(), [], `${context}: required top-level network error clears after correction`);
+
+      const duplicateNetwork = createBlock('network', { NAME: 'backend', DRIVER: 'bridge' });
+      backendNetwork.nextConnection.connect(duplicateNetwork.previousConnection);
+      assertDuplicateNetworkErrors([backendNetwork, duplicateNetwork], 'backend');
+      duplicateNetwork.setFieldValue('cache', 'NAME');
+      assert.deepEqual(collectWorkspace(), [], `${context}: renaming duplicate network clears duplicate errors`);
+      console.log(`[PASS] ${context}: duplicate network error clears after renaming one network`);
+
+      duplicateNetwork.setFieldValue(' backend ', 'NAME');
+      assert.deepEqual(collectWorkspace(), [], `${context}: duplicate network validation uses raw network-name semantics`);
+      duplicateNetwork.setFieldValue('cache', 'NAME');
+      assert.deepEqual(collectWorkspace(), [], `${context}: raw network-name semantic fixture restores clean state`);
+
+      duplicateNetwork.setFieldValue('backend', 'NAME');
+      assertDuplicateNetworkErrors([backendNetwork, duplicateNetwork], 'backend');
+      duplicateNetwork.dispose(true);
+      assert.deepEqual(collectWorkspace(), [], `${context}: removing duplicate network clears duplicate errors`);
+      console.log(`[PASS] ${context}: duplicate network error clears after removing the conflicting network`);
+
+      backendNetworkRef.setFieldValue('cache', 'TARGET');
+      assert.equal(
+        collectWorkspace().find((error) => error.blockId === backendNetworkRef.id)?.message,
+        'Unknown network "cache".',
+        `${context}: network reference is invalid before referenced network is added`
+      );
+      const cacheNetwork = createBlock('network', { NAME: 'cache', DRIVER: 'bridge' });
+      backendNetwork.nextConnection.connect(cacheNetwork.previousConnection);
+      assert.deepEqual(collectWorkspace(), [], `${context}: network reference becomes valid when referenced network is added`);
+      cacheNetwork.setFieldValue('queue', 'NAME');
+      assert.equal(
+        collectWorkspace().find((error) => error.blockId === backendNetworkRef.id)?.message,
+        'Unknown network "cache".',
+        `${context}: network reference becomes invalid when referenced network is renamed`
+      );
+      cacheNetwork.setFieldValue('cache', 'NAME');
+      assert.deepEqual(collectWorkspace(), [], `${context}: restoring referenced network name clears network reference error`);
+      cacheNetwork.dispose(true);
+      assert.equal(
+        collectWorkspace().find((error) => error.blockId === backendNetworkRef.id)?.message,
+        'Unknown network "cache".',
+        `${context}: network reference becomes invalid when referenced network is removed`
+      );
+      backendNetworkRef.setFieldValue('backend', 'TARGET');
+      assert.deepEqual(collectWorkspace(), [], `${context}: network reference error clears after changing to existing network`);
+      console.log(`[PASS] ${context}: network validation responds to added, renamed and removed top-level networks`);
+
+      backendNetworkRef.dispose(true);
+      backendNetwork.dispose(true);
+      assert.deepEqual(collectWorkspace(), [], `${context}: removing network blocks leaves existing validation clean`);
 
       const invalidFields = [
         [backend.service, 'IMAGE', '', 'node:20', 'Image is required'],

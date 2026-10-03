@@ -80,10 +80,14 @@ async function testDockerConnectionRules() {
     const first = workspace.newBlock('volume');
     const second = workspace.newBlock('volume');
     const dependency = workspace.newBlock('dependency');
+    const networkRef = workspace.newBlock('networkref');
+    const network = workspace.newBlock('network');
     const port = workspace.newBlock('port');
     const environment = workspace.newBlock('environment');
     const compose = workspace.newBlock('compose');
     const dependencies = service.getInput('DEPENDS_ON');
+    const networks = service.getInput('NETWORKS');
+    const composeNetworks = compose.getInput('NETWORKS');
     const volumes = service.getInput('VOLUMES');
     assert.ok(dependencies, 'Service has DEPENDS_ON');
     assert.deepEqual(dependencies.connection.getCheck(), ['dependency']);
@@ -92,6 +96,20 @@ async function testDockerConnectionRules() {
     dependencies.connection.connect(dependency.previousConnection);
     assert.equal(service.getInputTargetBlock('DEPENDS_ON'), dependency);
     console.log('[PASS] Service DEPENDS_ON accepts Dependency; Dependency stacks with dependency previous/next types');
+    assert.ok(networks, 'Service has NETWORKS');
+    assert.deepEqual(networks.connection.getCheck(), ['networkref']);
+    assert.deepEqual(networkRef.previousConnection.getCheck(), ['networkref']);
+    assert.deepEqual(networkRef.nextConnection.getCheck(), ['networkref']);
+    networks.connection.connect(networkRef.previousConnection);
+    assert.equal(service.getInputTargetBlock('NETWORKS'), networkRef);
+    console.log('[PASS] Service NETWORKS accepts network references; NetworkRef stacks with networkref previous/next types');
+    assert.ok(composeNetworks, 'Compose has NETWORKS');
+    assert.deepEqual(composeNetworks.connection.getCheck(), ['network']);
+    assert.deepEqual(network.previousConnection.getCheck(), ['network']);
+    assert.deepEqual(network.nextConnection.getCheck(), ['network']);
+    composeNetworks.connection.connect(network.previousConnection);
+    assert.equal(compose.getInputTargetBlock('NETWORKS'), network);
+    console.log('[PASS] Compose NETWORKS accepts top-level Network declarations; Network stacks with network previous/next types');
     assert.ok(volumes, 'Service has VOLUMES');
     assert.deepEqual(volumes.connection.getCheck(), ['volume']);
     assert.deepEqual(first.previousConnection.getCheck(), ['volume']);
@@ -106,8 +124,20 @@ async function testDockerConnectionRules() {
       ['Volume cannot connect to ENVIRONMENT', service.getInput('ENVIRONMENT').connection, first.previousConnection],
       ['Dependency cannot connect to PORTS', service.getInput('PORTS').connection, dependency.previousConnection],
       ['Dependency cannot connect to VOLUMES', volumes.connection, dependency.previousConnection],
+      ['NetworkRef cannot connect to PORTS', service.getInput('PORTS').connection, networkRef.previousConnection],
+      ['NetworkRef cannot connect to ENVIRONMENT', service.getInput('ENVIRONMENT').connection, networkRef.previousConnection],
+      ['NetworkRef cannot connect to VOLUMES', volumes.connection, networkRef.previousConnection],
+      ['NetworkRef cannot connect to DEPENDS_ON', dependencies.connection, networkRef.previousConnection],
+      ['NetworkRef cannot connect to Compose SERVICES', compose.getInput('SERVICES').connection, networkRef.previousConnection],
+      ['NetworkRef cannot connect to Compose NETWORKS', composeNetworks.connection, networkRef.previousConnection],
+      ['Network declaration cannot connect to service NETWORKS', networks.connection, network.previousConnection],
+      ['Network declaration cannot connect to service PORTS', service.getInput('PORTS').connection, network.previousConnection],
+      ['Network declaration cannot connect to service VOLUMES', volumes.connection, network.previousConnection],
+      ['Network declaration cannot connect to Compose SERVICES', compose.getInput('SERVICES').connection, network.previousConnection],
       ['Port cannot connect to DEPENDS_ON', dependencies.connection, port.previousConnection],
+      ['Port cannot connect to NETWORKS', networks.connection, port.previousConnection],
       ['Environment cannot connect to DEPENDS_ON', dependencies.connection, environment.previousConnection],
+      ['Environment cannot connect to NETWORKS', networks.connection, environment.previousConnection],
       ['Port cannot connect to VOLUMES', volumes.connection, port.previousConnection],
       ['Environment cannot connect to VOLUMES', volumes.connection, environment.previousConnection],
       ['Volume cannot connect to Compose SERVICES', compose.getInput('SERVICES').connection, first.previousConnection],
@@ -136,6 +166,14 @@ async function testDockerConnectionRules() {
     (block) => block.type === 'dependency'
   );
 
+  const networkRef = blocks.find(
+    (block) => block.type === 'networkref'
+  );
+
+  const network = blocks.find(
+    (block) => block.type === 'network'
+  );
+
   const environment = blocks.find(
     (block) => block.type === 'environment'
   );
@@ -158,6 +196,16 @@ async function testDockerConnectionRules() {
   assert.ok(
     dependency,
     'Dependency block should be generated.'
+  );
+
+  assert.ok(
+    networkRef,
+    'NetworkRef block should be generated.'
+  );
+
+  assert.ok(
+    network,
+    'Network block should be generated.'
   );
 
   assert.ok(
@@ -206,6 +254,37 @@ async function testDockerConnectionRules() {
     dependency.nextStatement,
     'dependency',
     'Dependency should stack below another Dependency-compatible block.'
+  );
+
+  const serviceNetworksInput = findInput(service, 'NETWORKS');
+
+  assert.ok(
+    serviceNetworksInput,
+    'Service should expose a NETWORKS statement input for stackable NetworkRef blocks.'
+  );
+
+  assert.equal(
+    serviceNetworksInput.type,
+    'input_statement',
+    'Service NETWORKS input should be a Blockly statement input.'
+  );
+
+  assert.equal(
+    serviceNetworksInput.check,
+    'networkref',
+    'Service NETWORKS input should only accept NetworkRef blocks.'
+  );
+
+  assert.equal(
+    networkRef.previousStatement,
+    'networkref',
+    'NetworkRef should stack above another NetworkRef-compatible block.'
+  );
+
+  assert.equal(
+    networkRef.nextStatement,
+    'networkref',
+    'NetworkRef should stack below another NetworkRef-compatible block.'
   );
 
   const servicePortsInput = findInput(service, 'PORTS');
@@ -277,6 +356,7 @@ async function testDockerConnectionRules() {
   );
 
   const servicesInput = findInput(compose, 'SERVICES');
+  const networksInput = findInput(compose, 'NETWORKS');
 
   assert.ok(
     servicesInput,
@@ -293,6 +373,35 @@ async function testDockerConnectionRules() {
     servicesInput.check,
     'service',
     'Compose SERVICES should accept only Service blocks.'
+  );
+
+  assert.ok(
+    networksInput,
+    'Compose should contain a NETWORKS statement input.'
+  );
+
+  assert.equal(
+    networksInput.type,
+    'input_statement',
+    'Compose NETWORKS should be a statement input.'
+  );
+
+  assert.equal(
+    networksInput.check,
+    'network',
+    'Compose NETWORKS should accept only Network blocks.'
+  );
+
+  assert.equal(
+    network.previousStatement,
+    'network',
+    'Network should connect to a Network-compatible parent or sibling.'
+  );
+
+  assert.equal(
+    network.nextStatement,
+    'network',
+    'Network should allow another Network below it.'
   );
 
   assert.equal(

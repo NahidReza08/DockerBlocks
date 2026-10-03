@@ -73,19 +73,23 @@ with a new `.langium` file — it overwrites `blockly_app/src/blocks.ts`,
 
 ## Supported Docker Compose subset
 
-DockerBlocks supports a Compose root containing multiple Service blocks and
-emits a YAML `services:` mapping. The text grammar requires at least one service.
+DockerBlocks supports a Compose root containing multiple Service blocks plus
+optional top-level Network declarations, and emits YAML `services:` and
+`networks:` mappings. The text grammar requires at least one service.
 
 | Block | Supported fields and validation |
 |---|---|
-| Service | Required, nonblank name and image; zero or more Dependency, Port, Environment, and Volume blocks. Service names must be unique. |
+| Service | Required, nonblank name and image; zero or more Dependency, NetworkRef, Port, Environment, and Volume blocks. Service names must be unique. |
 | Dependency | Required target service name; target must reference an existing service and must not be the owning service itself. YAML uses short `depends_on` list syntax. |
+| NetworkRef | Required target network name; target must reference an existing top-level Network block. YAML uses short service `networks` list syntax. |
+| Network | Optional top-level declaration with required, unique name and optional simple driver field. The default Blockly value is `bridge`; clearing the driver emits a declaration without a driver. |
 | Port | Required host and container ports, each an integer in `1..65535`; emitted as a quoted `HOST:CONTAINER` mapping. |
 | Environment | A `KEY=VALUE` entry, entered in separate Blockly fields. Keys must match `[A-Za-z_][A-Za-z0-9_]*`: ASCII letter or underscore first, then letters, digits, or underscores. YAML uses `KEY: VALUE` mapping entries. |
 | Volume | Required, nonblank source and target; quoted `SOURCE:TARGET` short syntax only. |
 
 Blockly connection rules restrict Compose's service stack to Service blocks,
-and each Service's dependencies, ports, environment, and volumes stacks to matching block types.
+Compose's network stack to Network blocks, and each Service's dependencies,
+network references, ports, environment, and volumes stacks to matching block types.
 Validation messages appear in the error panel and as warnings on the affected
 blocks; warnings do not prevent YAML generation.
 
@@ -95,16 +99,20 @@ requires an `ID` or `INT` value. Digit-only values are quoted in YAML; other val
 are emitted as entered, so arbitrary YAML-sensitive strings are not generally escaped.
 
 The [text grammar](generate_blockly/input/docker-compose.langium) orders each
-service's image, dependencies, ports, environment entries, then volumes. It uses
-`depends_on TARGET`, `port HOST -> CONTAINER`, `environment KEY = VALUE`, and
-`volume "SOURCE" -> "TARGET"`. Service names and images use its restricted
-`ID` token (including simple tags such as `node:20`), not the full Docker
-image-reference syntax. Blockly name/image validation only checks nonblank fields.
+service's image, dependencies, network references, ports, environment entries,
+then volumes, followed by any top-level networks after all services. It uses
+`depends_on TARGET`, `network TARGET`, `port HOST -> CONTAINER`,
+`environment KEY = VALUE`, `volume "SOURCE" -> "TARGET"`, and
+`network NAME driver DRIVER`. Service names, images, dependency targets, and
+network names use its restricted `ID` token (including simple tags such as
+`node:20`), not the full Docker image-reference syntax. Blockly name/image
+validation only checks nonblank fields.
 
-Unsupported features include long-form `depends_on` conditions, `networks`,
-top-level named volume declarations, long volume syntax, `secrets`, `env_file`,
-`build`, commands, and health checks. Volume validation checks only nonblank
-fields; it does not verify paths or implement mount options.
+Unsupported features include long-form `depends_on` conditions, advanced
+networking options such as long-form service networks, aliases, static IPs,
+`external`, and `ipam`, top-level named volume declarations, long volume syntax,
+`secrets`, `env_file`, `build`, commands, and health checks. Volume validation
+checks only nonblank fields; it does not verify paths or implement mount options.
 
 ## Run and verify
 
@@ -333,7 +341,8 @@ at the end of this section). It exports three functions:
   `generator.statementToCode`) and concatenates them — keywords included —
   back into the rule's original concrete syntax, trimmed of extra
   whitespace where relevant. Docker-specific templates instead emit Compose
-  YAML for Compose, Service, Port, Environment, and Volume blocks. Keep changes
+  YAML for Compose, Service, Dependency, NetworkRef, Network, Port,
+  Environment, and Volume blocks through handwritten YAML helpers. Keep changes
   to generated files consistent with their templates in `blockly-ts-target.js`.
 - **`generateMainTs(irRules)`** → contents of `main.ts`. Wires up
   `defineBlocks()`, injects the Blockly workspace into `#blocklyDiv` with a
@@ -377,7 +386,8 @@ instead of the `blockly_app/` scaffold in this repo.
 - **`src/main.ts`**, **`src/blocks.ts`**, **`src/generator.ts`** — these
   three files are **overwritten every time you run `parse.js`**. The checked-in
   copies implement the Docker Compose subset documented above, with a Docker
-  toolbox and block-specific validation warnings.
+  toolbox that delegates runtime behavior to handwritten app, YAML, and
+  validation helpers.
 
 `generator.ts` imports Blockly's `javascriptGenerator` as a vehicle for its
 `forBlock`/`statementToCode`/`valueToCode` machinery. Docker blocks emit Compose

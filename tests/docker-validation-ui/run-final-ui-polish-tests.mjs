@@ -137,6 +137,26 @@ try {
   vm.runInContext('app.handleWorkspaceChange()', context);
   clean();
   assert.equal(dependency.lastValidationWarning, null);
+  const networkRef = workspace.newBlock('networkref');
+  networkRef.setFieldValue('missing-network', 'TARGET');
+  duplicateA.getInput('NETWORKS').connection.connect(networkRef.previousConnection);
+  networkRef.lastValidationWarning = undefined;
+  networkRef.setWarningText = (text, id) => {
+    if (id === 'captured-validation-error') {
+      networkRef.lastValidationWarning = text;
+    }
+  };
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  assert.equal(elements.errorOutput.children.length, 1, 'Network validation renders one error');
+  assert.equal(elements.errorOutput.children[0].children[1].textContent, 'Unknown network "missing-network".');
+  assert.equal(networkRef.lastValidationWarning, 'Unknown network "missing-network".');
+  const network = workspace.newBlock('network');
+  network.setFieldValue('missing-network', 'NAME');
+  network.setFieldValue('bridge', 'DRIVER');
+  compose.getInput('NETWORKS').connection.connect(network.previousConnection);
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  clean();
+  assert.equal(networkRef.lastValidationWarning, null);
   click('clearWorkspace');
   clean();
   for (let i = 0; i < 2; i++) {

@@ -24,8 +24,12 @@ export function generateDockerComposeYaml(
   const services = generator
     .statementToCode(block, 'SERVICES')
     .replace(/\n$/, '');
+  const networks = generator
+    .statementToCode(block, 'NETWORKS')
+    .replace(/\n$/, '');
 
-  return 'services:\n' + (services ? services + '\n' : '');
+  return 'services:\n' + (services ? services + '\n' : '') +
+    (networks ? 'networks:\n' + networks + '\n' : '');
 }
 
 export function generateDockerServiceYaml(
@@ -35,17 +39,20 @@ export function generateDockerServiceYaml(
   const name = block.getFieldValue('NAME') ?? '';
   const image = block.getFieldValue('IMAGE') ?? '';
   const dependencies = generator.statementToCode(block, 'DEPENDS_ON').trimEnd();
+  const networks = generator.statementToCode(block, 'NETWORKS').trimEnd();
   const ports = generator.statementToCode(block, 'PORTS').trimEnd();
   const environments = generator.statementToCode(block, 'ENVIRONMENT').trimEnd();
   const volumes = generator.statementToCode(block, 'VOLUMES').trimEnd();
 
   const listedDependencies = listItems(dependencies, '    - ');
+  const listedNetworks = listItems(networks, '    - ');
   const listedPorts = listItems(ports, '    - ');
   const listedEnvironments = listItems(environments, '    ');
   const listedVolumes = listItems(volumes, '    - ');
 
   return name + ':\n  image: ' + image + '\n' +
     (listedDependencies ? '  depends_on:\n' + listedDependencies + '\n' : '') +
+    (listedNetworks ? '  networks:\n' + listedNetworks + '\n' : '') +
     (listedPorts ? '  ports:\n' + listedPorts + '\n' : '') +
     (listedEnvironments ? '  environment:\n' + listedEnvironments + '\n' : '') +
     (listedVolumes ? '  volumes:\n' + listedVolumes + '\n' : '');
@@ -55,6 +62,19 @@ export function generateDockerDependencyYaml(block: Blockly.Block): string {
   const target = block.getFieldValue('TARGET') ?? '';
 
   return target + '\n';
+}
+
+export function generateDockerNetworkRefYaml(block: Blockly.Block): string {
+  const target = block.getFieldValue('TARGET') ?? '';
+
+  return target + '\n';
+}
+
+export function generateDockerNetworkYaml(block: Blockly.Block): string {
+  const name = block.getFieldValue('NAME') ?? '';
+  const driver = String(block.getFieldValue('DRIVER') ?? '').trim();
+
+  return name + ':\n' + (driver ? '  driver: ' + driver + '\n' : '');
 }
 
 export function generateDockerPortYaml(block: Blockly.Block): string {
