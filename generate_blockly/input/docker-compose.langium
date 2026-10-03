@@ -14,7 +14,8 @@ entry Compose:
 
 Service:
     'service' name=ID '{'
-        'image' image=ID
+        ('image' image=ID)?
+        (build=Build)?
         (restart=Restart)?
         (healthcheck=Healthcheck)?
         (dependencies+=Dependency)*
@@ -26,6 +27,9 @@ Service:
 
 Dependency:
     'depends_on' target=ID;
+
+Build:
+    'build' context=STRING;
 
 Restart:
     'restart' policy=('no' | 'always' | 'on-failure' | 'unless-stopped');

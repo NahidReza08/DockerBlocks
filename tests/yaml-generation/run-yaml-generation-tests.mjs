@@ -346,9 +346,89 @@ async function testComposeYamlGeneration() {
     console.log('✓ backend service generated');
     console.log('✓ node image generated');
 
-    console.log('Testing Docker Compose restart policy grammar and YAML...');
+    console.log('Testing Docker Compose build grammar and YAML...');
 
     const grammarServices = await createServicesForGrammar({ grammar });
+    for (const [label, source] of [
+      ['image-only service', 'compose {\n  service web {\n    image nginx\n  }\n}\n'],
+      ['build-only service', 'compose {\n  service web {\n    build "."\n  }\n}\n'],
+      ['image plus build service', 'compose {\n  service web {\n    image myapp:latest\n    build "."\n  }\n}\n'],
+      ['service with neither image nor build', 'compose {\n  service web {\n  }\n}\n']
+    ]) {
+      const parsed = grammarServices.parser.LangiumParser.parse(source);
+      assert.deepEqual(parsed.lexerErrors, [], `${label} should have no lexer errors`);
+      assert.deepEqual(parsed.parserErrors, [], `${label} should parse`);
+    }
+
+    const buildBlockDefinition = blockDefinitions.find((block) => block.type === 'build');
+    assert.ok(buildBlockDefinition, 'Generated blocks should include build');
+    assert.equal(
+      buildBlockDefinition.output,
+      'build',
+      'Build should be a value block for the Service BUILD input.'
+    );
+    assert.deepEqual(
+      blockInputs(buildBlockDefinition).find((input) => input.name === 'CONTEXT'),
+      {
+        type: 'field_input',
+        name: 'CONTEXT',
+        text: '.'
+      },
+      'Build context should use a simple text field with a dot default.'
+    );
+
+    const buildOnlyWorkspace = new Blockly.Workspace();
+    try {
+      const buildCompose = buildOnlyWorkspace.newBlock('compose');
+      const buildService = buildOnlyWorkspace.newBlock('service');
+      buildService.setFieldValue('web', 'NAME');
+      buildService.setFieldValue('', 'IMAGE');
+      buildCompose.getInput('SERVICES').connection.connect(buildService.previousConnection);
+      const build = buildOnlyWorkspace.newBlock('build');
+      build.setFieldValue('.', 'CONTEXT');
+      buildService.getInput('BUILD').connection.connect(build.outputConnection);
+      const buildOnlyYaml = generator.workspaceToCode(buildOnlyWorkspace);
+      assert.equal(
+        buildOnlyYaml,
+        'services:\n' +
+        '  web:\n' +
+        '    build: .\n',
+        'Build-only services should generate short-form build YAML without an image.'
+      );
+      assert.deepEqual(parse(buildOnlyYaml), {
+        services: {
+          web: {
+            build: '.'
+          }
+        }
+      });
+
+      buildService.setFieldValue('my-app:latest', 'IMAGE');
+      const imageAndBuildYaml = generator.workspaceToCode(buildOnlyWorkspace);
+      assert.equal(
+        imageAndBuildYaml,
+        'services:\n' +
+        '  web:\n' +
+        '    image: my-app:latest\n' +
+        '    build: .\n',
+        'Services with image and build should emit both in deterministic order.'
+      );
+      assert.deepEqual(parse(imageAndBuildYaml), {
+        services: {
+          web: {
+            image: 'my-app:latest',
+            build: '.'
+          }
+        }
+      });
+    } finally {
+      buildOnlyWorkspace.dispose();
+    }
+
+    console.log('✓ build grammar and YAML generated');
+
+    console.log('Testing Docker Compose restart policy grammar and YAML...');
+
     const noRestartDsl =
       'compose {\n' +
       '  service web {\n' +

@@ -28,6 +28,10 @@ bootstrapBlocklyApp({
         },
         {
           "kind": "block",
+          "type": "build"
+        },
+        {
+          "kind": "block",
           "type": "restart"
         },
         {

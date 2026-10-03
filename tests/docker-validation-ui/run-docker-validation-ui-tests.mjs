@@ -34,6 +34,11 @@ function read(file) {
 }
 
 function assertDockerValidationRules(source, context) {
+  assert.ok(source.includes("block.type === 'build'"), `${context}: validation inspects Build blocks`);
+  assert.ok(source.includes('Build context is required.'), `${context}: blank Build contexts are rejected`);
+  assert.ok(source.includes('Service requires an image or build configuration.'),
+    `${context}: Service requires image or build validation is present`);
+  console.log(`[PASS] ${context}: Build validation uses the shared validator`);
   assert.ok(source.includes("block.type === 'restart'"), `${context}: validation inspects Restart blocks`);
   assert.ok(source.includes('Restart policy must be one of: no, always, on-failure, unless-stopped.'),
     `${context}: malformed Restart policies are rejected`);

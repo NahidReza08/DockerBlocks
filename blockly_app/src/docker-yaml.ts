@@ -39,7 +39,8 @@ export function generateDockerServiceYaml(
   generator: DockerYamlGenerator
 ): string {
   const name = block.getFieldValue('NAME') ?? '';
-  const image = block.getFieldValue('IMAGE') ?? '';
+  const image = String(block.getFieldValue('IMAGE') ?? '').trim();
+  const build = generator.valueToCode(block, 'BUILD', Order.NONE);
   const restart = generator.valueToCode(block, 'RESTART', Order.NONE);
   const healthcheck = generator
     .valueToCode(block, 'HEALTHCHECK', Order.NONE)
@@ -56,7 +57,9 @@ export function generateDockerServiceYaml(
   const listedEnvironments = listItems(environments, '    ');
   const listedVolumes = listItems(volumes, '    - ');
 
-  return name + ':\n  image: ' + image + '\n' +
+  return name + ':\n' +
+    (image ? '  image: ' + image + '\n' : '') +
+    (build ? '  build: ' + build + '\n' : '') +
     (restart ? '  restart: ' + restart + '\n' : '') +
     (healthcheck ? '  healthcheck:\n' + healthcheck + '\n' : '') +
     (listedDependencies ? '  depends_on:\n' + listedDependencies + '\n' : '') +
@@ -64,6 +67,12 @@ export function generateDockerServiceYaml(
     (listedPorts ? '  ports:\n' + listedPorts + '\n' : '') +
     (listedEnvironments ? '  environment:\n' + listedEnvironments + '\n' : '') +
     (listedVolumes ? '  volumes:\n' + listedVolumes + '\n' : '');
+}
+
+export function generateDockerBuildYaml(block: Blockly.Block): [string, Order] {
+  const context = block.getFieldValue('CONTEXT') ?? '';
+
+  return [String(context), Order.ATOMIC];
 }
 
 export function generateDockerHealthcheckYaml(block: Blockly.Block): [string, Order] {

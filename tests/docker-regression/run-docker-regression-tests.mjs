@@ -148,7 +148,7 @@ try {
   assert.equal(
     String(invalidServiceBlock.getFieldValue('IMAGE') ?? '').trim(),
     '',
-    'Regression fixture should contain a service with a missing image'
+    'Regression fixture should contain a service with neither image nor build'
   );
 
   const mainSource = await readFile(
@@ -264,8 +264,18 @@ try {
   );
 
   assert.ok(
-    dockerValidationSource.includes("'Image is required'"),
-    'Missing Docker image should produce the existing validation error'
+    dockerValidationSource.includes("block.type === 'build'"),
+    'Validation should inspect Docker build blocks'
+  );
+
+  assert.ok(
+    dockerValidationSource.includes("'Service requires an image or build configuration.'"),
+    'A Docker service without image or build should produce the image-or-build validation error'
+  );
+
+  assert.ok(
+    dockerValidationSource.includes("'Build context is required.'"),
+    'A blank Docker build context should produce the build context validation error'
   );
 
   assert.ok(
@@ -755,8 +765,74 @@ try {
         `${context}: service without healthcheck restores existing YAML exactly`);
       console.log(`[PASS] ${context}: healthcheck validation covers required fields, durations, retries and clearing`);
 
+      const buildOnlyService = createBlock('service', { NAME: 'builder', IMAGE: '' });
+      backend.service.nextConnection.connect(buildOnlyService.previousConnection);
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === buildOnlyService.id),
+        [{
+          type: 'validation',
+          message: 'Service requires an image or build configuration.',
+          severity: 'error',
+          blockId: buildOnlyService.id
+        }],
+        `${context}: service with neither image nor build is invalid`
+      );
+
+      const build = createBlock('build', { CONTEXT: '.' });
+      buildOnlyService.getInput('BUILD').connection.connect(build.outputConnection);
+      assert.deepEqual(collectWorkspace(), [], `${context}: build-only service validates cleanly`);
+      assert.equal(
+        generator.workspaceToCode(integrationWorkspace),
+        expectedYaml + '  builder:\n    build: .\n',
+        `${context}: build-only service emits short-form build YAML`
+      );
+
+      buildOnlyService.setFieldValue('my-app:latest', 'IMAGE');
+      assert.deepEqual(collectWorkspace(), [], `${context}: image plus build validates cleanly`);
+      assert.equal(
+        generator.workspaceToCode(integrationWorkspace),
+        expectedYaml + '  builder:\n    image: my-app:latest\n    build: .\n',
+        `${context}: service with image and build emits both fields`
+      );
+
+      buildOnlyService.setFieldValue('', 'IMAGE');
+      assert.deepEqual(collectWorkspace(), [], `${context}: removing image while build remains stays valid`);
+      build.setFieldValue('', 'CONTEXT');
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === build.id),
+        [{
+          type: 'validation',
+          message: 'Build context is required.',
+          severity: 'error',
+          blockId: build.id
+        }],
+        `${context}: blank build context attaches to the Build block`
+      );
+      assert.equal(
+        collectWorkspace().find((error) => error.blockId === buildOnlyService.id)?.message,
+        'Service requires an image or build configuration.',
+        `${context}: service with blank image and blank build context has no usable image/build`
+      );
+      build.setFieldValue('.', 'CONTEXT');
+      assert.deepEqual(collectWorkspace(), [], `${context}: fixing build context clears build and service errors`);
+
+      buildOnlyService.setFieldValue('builder:latest', 'IMAGE');
+      build.dispose(true);
+      assert.deepEqual(collectWorkspace(), [], `${context}: removing build while image remains stays valid`);
+      buildOnlyService.setFieldValue('', 'IMAGE');
+      assert.equal(
+        collectWorkspace().find((error) => error.blockId === buildOnlyService.id)?.message,
+        'Service requires an image or build configuration.',
+        `${context}: clearing both image and build is invalid`
+      );
+      buildOnlyService.dispose(true);
+      assert.deepEqual(collectWorkspace(), [], `${context}: removing build validation fixture restores clean state`);
+      assert.equal(generator.workspaceToCode(integrationWorkspace), expectedYaml,
+        `${context}: removing build fixture restores existing YAML exactly`);
+      console.log(`[PASS] ${context}: build validation covers image-only, build-only, image+build and clearing`);
+
       const invalidFields = [
-        [backend.service, 'IMAGE', '', 'node:20', 'Image is required'],
+        [backend.service, 'IMAGE', '', 'node:20', 'Service requires an image or build configuration.'],
         [backend.port, 'HOST_PORT', '65536', '3000', 'Host port must be an integer between 1 and 65535.'],
         [apiPort, 'KEY', '1INVALID', 'API_PORT', 'Environment key must start with a letter or underscore and contain only letters, numbers, and underscores.'],
         [backend.volume, 'SOURCE', '', './data', 'Volume source is required.'],
@@ -840,7 +916,7 @@ try {
       const errors = collectVolumeWorkspace();
       assert.equal(errors.length, 3);
       for (const [block, message] of [
-        [service, 'Image is required'],
+        [service, 'Service requires an image or build configuration.'],
         [port, 'Host port must be an integer between 1 and 65535.'],
         [env, 'Environment key is required.']
       ]) {

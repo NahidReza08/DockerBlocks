@@ -80,6 +80,7 @@ async function testDockerConnectionRules() {
     const first = workspace.newBlock('volume');
     const second = workspace.newBlock('volume');
     const dependency = workspace.newBlock('dependency');
+    const build = workspace.newBlock('build');
     const restart = workspace.newBlock('restart');
     const healthcheck = workspace.newBlock('healthcheck');
     const networkRef = workspace.newBlock('networkref');
@@ -88,6 +89,7 @@ async function testDockerConnectionRules() {
     const environment = workspace.newBlock('environment');
     const compose = workspace.newBlock('compose');
     const dependencies = service.getInput('DEPENDS_ON');
+    const buildInput = service.getInput('BUILD');
     const restartInput = service.getInput('RESTART');
     const healthcheckInput = service.getInput('HEALTHCHECK');
     const networks = service.getInput('NETWORKS');
@@ -100,6 +102,12 @@ async function testDockerConnectionRules() {
     dependencies.connection.connect(dependency.previousConnection);
     assert.equal(service.getInputTargetBlock('DEPENDS_ON'), dependency);
     console.log('[PASS] Service DEPENDS_ON accepts Dependency; Dependency stacks with dependency previous/next types');
+    assert.ok(buildInput, 'Service has BUILD');
+    assert.deepEqual(buildInput.connection.getCheck(), ['build']);
+    assert.deepEqual(build.outputConnection.getCheck(), ['build']);
+    buildInput.connection.connect(build.outputConnection);
+    assert.equal(service.getInputTargetBlock('BUILD'), build);
+    console.log('[PASS] Service BUILD accepts Build value block');
     assert.ok(restartInput, 'Service has RESTART');
     assert.deepEqual(restartInput.connection.getCheck(), ['restart']);
     assert.deepEqual(restart.outputConnection.getCheck(), ['restart']);
@@ -140,6 +148,10 @@ async function testDockerConnectionRules() {
       ['Volume cannot connect to ENVIRONMENT', service.getInput('ENVIRONMENT').connection, first.previousConnection],
       ['Dependency cannot connect to PORTS', service.getInput('PORTS').connection, dependency.previousConnection],
       ['Dependency cannot connect to VOLUMES', volumes.connection, dependency.previousConnection],
+      ['Build cannot connect to RESTART', restartInput.connection, build.outputConnection],
+      ['Build cannot connect to HEALTHCHECK', healthcheckInput.connection, build.outputConnection],
+      ['Build cannot connect to PORTS', service.getInput('PORTS').connection, build.outputConnection],
+      ['Restart cannot connect to BUILD', buildInput.connection, restart.outputConnection],
       ['Restart cannot connect to PORTS', service.getInput('PORTS').connection, restart.outputConnection],
       ['Restart cannot connect to NETWORKS', networks.connection, restart.outputConnection],
       ['Restart cannot connect to HEALTHCHECK', healthcheckInput.connection, restart.outputConnection],
@@ -147,6 +159,7 @@ async function testDockerConnectionRules() {
       ['Healthcheck cannot connect to PORTS', service.getInput('PORTS').connection, healthcheck.outputConnection],
       ['Healthcheck cannot connect to NETWORKS', networks.connection, healthcheck.outputConnection],
       ['Dependency cannot connect to RESTART', restartInput.connection, dependency.previousConnection],
+      ['Dependency cannot connect to BUILD', buildInput.connection, dependency.previousConnection],
       ['Dependency cannot connect to HEALTHCHECK', healthcheckInput.connection, dependency.previousConnection],
       ['NetworkRef cannot connect to RESTART', restartInput.connection, networkRef.previousConnection],
       ['NetworkRef cannot connect to HEALTHCHECK', healthcheckInput.connection, networkRef.previousConnection],
@@ -192,6 +205,10 @@ async function testDockerConnectionRules() {
     (block) => block.type === 'dependency'
   );
 
+  const build = blocks.find(
+    (block) => block.type === 'build'
+  );
+
   const restart = blocks.find(
     (block) => block.type === 'restart'
   );
@@ -230,6 +247,11 @@ async function testDockerConnectionRules() {
   assert.ok(
     dependency,
     'Dependency block should be generated.'
+  );
+
+  assert.ok(
+    build,
+    'Build block should be generated.'
   );
 
   assert.ok(
@@ -298,6 +320,41 @@ async function testDockerConnectionRules() {
     dependency.nextStatement,
     'dependency',
     'Dependency should stack below another Dependency-compatible block.'
+  );
+
+  const serviceBuildInput = findInput(service, 'BUILD');
+
+  assert.ok(
+    serviceBuildInput,
+    'Service should expose a BUILD value input for an optional Build block.'
+  );
+
+  assert.equal(
+    serviceBuildInput.type,
+    'input_value',
+    'Service BUILD input should be a Blockly value input.'
+  );
+
+  assert.equal(
+    serviceBuildInput.check,
+    'build',
+    'Service BUILD input should only accept Build blocks.'
+  );
+
+  assert.equal(
+    build.output,
+    'build',
+    'Build should output only into a Build-compatible value input.'
+  );
+
+  assert.deepEqual(
+    findInput(build, 'CONTEXT'),
+    {
+      type: 'field_input',
+      name: 'CONTEXT',
+      text: '.'
+    },
+    'Build should expose a beginner-friendly default context.'
   );
 
   const serviceRestartInput = findInput(service, 'RESTART');

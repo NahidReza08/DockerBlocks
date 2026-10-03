@@ -45,56 +45,64 @@ export function defineBlocks() {
             "text": "nginx"
           }
         ],
-        "message3": "Restart: %1",
+        "message3": "Build: %1",
         "args3": [
+          {
+            "type": "input_value",
+            "name": "BUILD",
+            "check": "build"
+          }
+        ],
+        "message4": "Restart: %1",
+        "args4": [
           {
             "type": "input_value",
             "name": "RESTART",
             "check": "restart"
           }
         ],
-        "message4": "Healthcheck: %1",
-        "args4": [
+        "message5": "Healthcheck: %1",
+        "args5": [
           {
             "type": "input_value",
             "name": "HEALTHCHECK",
             "check": "healthcheck"
           }
         ],
-        "message5": "Depends On: %1",
-        "args5": [
+        "message6": "Depends On: %1",
+        "args6": [
           {
             "type": "input_statement",
             "name": "DEPENDS_ON",
             "check": "dependency"
           }
         ],
-        "message6": "Networks: %1",
-        "args6": [
+        "message7": "Networks: %1",
+        "args7": [
           {
             "type": "input_statement",
             "name": "NETWORKS",
             "check": "networkref"
           }
         ],
-        "message7": "Ports: %1",
-        "args7": [
+        "message8": "Ports: %1",
+        "args8": [
           {
             "type": "input_statement",
             "name": "PORTS",
             "check": "port"
           }
         ],
-        "message8": "Environment: %1",
-        "args8": [
+        "message9": "Environment: %1",
+        "args9": [
           {
             "type": "input_statement",
             "name": "ENVIRONMENT",
             "check": "environment"
           }
         ],
-        "message9": "Volumes: %1",
-        "args9": [
+        "message10": "Volumes: %1",
+        "args10": [
           {
             "type": "input_statement",
             "name": "VOLUMES",
@@ -119,6 +127,20 @@ export function defineBlocks() {
         "colour": 210,
         "previousStatement": "dependency",
         "nextStatement": "dependency"
+      },
+      {
+        "type": "build",
+        "message0": "Build",
+        "message1": "Context: %1",
+        "args1": [
+          {
+            "type": "field_input",
+            "name": "CONTEXT",
+            "text": "."
+          }
+        ],
+        "colour": 35,
+        "output": "build"
       },
       {
         "type": "restart",

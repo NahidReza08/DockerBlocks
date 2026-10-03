@@ -177,6 +177,23 @@ try {
   vm.runInContext('app.handleWorkspaceChange()', context);
   clean();
   assert.equal(healthcheck.lastValidationWarning, null);
+  const build = workspace.newBlock('build');
+  build.setFieldValue('', 'CONTEXT');
+  duplicateA.getInput('BUILD').connection.connect(build.outputConnection);
+  build.lastValidationWarning = undefined;
+  build.setWarningText = (text, id) => {
+    if (id === 'captured-validation-error') {
+      build.lastValidationWarning = text;
+    }
+  };
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  assert.equal(elements.errorOutput.children.length, 1, 'Build validation renders one error');
+  assert.equal(elements.errorOutput.children[0].children[1].textContent, 'Build context is required.');
+  assert.equal(build.lastValidationWarning, 'Build context is required.');
+  build.setFieldValue('.', 'CONTEXT');
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  clean();
+  assert.equal(build.lastValidationWarning, null);
   click('clearWorkspace');
   clean();
   for (let i = 0; i < 2; i++) {

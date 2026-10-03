@@ -139,8 +139,17 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message3 = "Restart: %1";
+        block.message3 = "Build: %1";
         block.args3 = [
+            {
+                type: "input_value",
+                name: "BUILD",
+                check: "build"
+            }
+        ];
+
+        block.message4 = "Restart: %1";
+        block.args4 = [
             {
                 type: "input_value",
                 name: "RESTART",
@@ -148,8 +157,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message4 = "Healthcheck: %1";
-        block.args4 = [
+        block.message5 = "Healthcheck: %1";
+        block.args5 = [
             {
                 type: "input_value",
                 name: "HEALTHCHECK",
@@ -157,8 +166,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message5 = "Depends On: %1";
-        block.args5 = [
+        block.message6 = "Depends On: %1";
+        block.args6 = [
             {
                 type: "input_statement",
                 name: "DEPENDS_ON",
@@ -166,8 +175,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message6 = "Networks: %1";
-        block.args6 = [
+        block.message7 = "Networks: %1";
+        block.args7 = [
             {
                 type: "input_statement",
                 name: "NETWORKS",
@@ -175,8 +184,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message7 = "Ports: %1";
-        block.args7 = [
+        block.message8 = "Ports: %1";
+        block.args8 = [
             {
                 type: "input_statement",
                 name: "PORTS",
@@ -184,8 +193,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message8 = "Environment: %1";
-        block.args8 = [
+        block.message9 = "Environment: %1";
+        block.args9 = [
             {
                 type: "input_statement",
                 name: "ENVIRONMENT",
@@ -193,8 +202,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message9 = "Volumes: %1";
-        block.args9 = [
+        block.message10 = "Volumes: %1";
+        block.args10 = [
             {
                 type: "input_statement",
                 name: "VOLUMES",
@@ -209,6 +218,22 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             block.previousStatement = stackType;
             block.nextStatement = stackType;
         }
+
+        return block;
+    }
+
+    if (ruleLower === "build") {
+        block.message0 = "Build";
+        block.message1 = "Context: %1";
+        block.args1 = [
+            {
+                type: "field_input",
+                name: "CONTEXT",
+                text: "."
+            }
+        ];
+        block.colour = 35;
+        block.output = "build";
 
         return block;
     }
@@ -546,6 +571,14 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
         ].join('\n');
     }
 
+    if (blockType === "build") {
+        return [
+            `generator.forBlock['build'] = function (block: Blockly.Block): [string, Order] {`,
+            `  return generateDockerBuildYaml(block);`,
+            `};`
+        ].join('\n');
+    }
+
     if (blockType === "restart") {
         return [
             `generator.forBlock['restart'] = function (block: Blockly.Block): [string, Order] {`,
@@ -636,7 +669,7 @@ export function generateGeneratorTs(irRules) {
     .map(rule => ruleToGeneratorFunction(rule, stackTypes, valueRules))
     .join("\n\n");
   const usesDockerYamlHelpers = irRules.some(rule =>
-    ["compose", "service", "restart", "healthcheck", "dependency", "networkref", "network", "port", "environment", "volume"].includes(rule.name.toLowerCase())
+    ["compose", "service", "build", "restart", "healthcheck", "dependency", "networkref", "network", "port", "environment", "volume"].includes(rule.name.toLowerCase())
   );
 
   const usesOrder = functions.includes("Order");
@@ -646,6 +679,7 @@ export function generateGeneratorTs(irRules) {
   const dockerYamlImport = usesDockerYamlHelpers
     ? `import {
   generateDockerComposeYaml,
+  generateDockerBuildYaml,
   generateDockerDependencyYaml,
   generateDockerEnvironmentYaml,
   generateDockerHealthcheckYaml,
@@ -674,7 +708,7 @@ ${functions}
 export function generateMainTs(irRules) {
     const toolboxCategories = [];
 
-    const dockerBlockTypes = new Set(["compose", "service", "restart", "healthcheck", "dependency", "networkref", "network", "port", "environment", "volume"]);
+    const dockerBlockTypes = new Set(["compose", "service", "build", "restart", "healthcheck", "dependency", "networkref", "network", "port", "environment", "volume"]);
 
     const dockerRules = irRules.filter(r =>
         dockerBlockTypes.has(r.name.toLowerCase())

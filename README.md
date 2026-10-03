@@ -79,7 +79,8 @@ optional top-level Network declarations, and emits YAML `services:` and
 
 | Block | Supported fields and validation |
 |---|---|
-| Service | Required, nonblank name and image; optional Restart policy and optional Healthcheck; zero or more Dependency, NetworkRef, Port, Environment, and Volume blocks. Service names must be unique. |
+| Service | Required, nonblank name; image or Build is required, and both may be used together. Also supports optional Restart policy and optional Healthcheck; zero or more Dependency, NetworkRef, Port, Environment, and Volume blocks. Service names must be unique. |
+| Build | Optional service-level short-form build context. Blank contexts are rejected. YAML emits `build: CONTEXT`; long-form build options are intentionally unsupported. |
 | Restart | Optional service-level restart policy selected from `no`, `always`, `on-failure`, or `unless-stopped`. YAML quotes `no` as `"no"` so it remains the intended Compose string value. |
 | Healthcheck | Optional service-level healthcheck with command, interval, timeout, and retries. YAML uses `test: ["CMD-SHELL", "<command>"]`; interval and timeout accept the small documented duration format `500ms`, `10s`, `2m`, or `1h`; retries must be an integer `>= 1`. |
 | Dependency | Required target service name; target must reference an existing service and must not be the owning service itself. YAML uses short `depends_on` list syntax. |
@@ -91,9 +92,9 @@ optional top-level Network declarations, and emits YAML `services:` and
 
 Blockly connection rules restrict Compose's service stack to Service blocks,
 Compose's network stack to Network blocks, each Service's restart input to a
-Restart value block, each Service's healthcheck input to a Healthcheck value
-block, and each Service's dependencies, network references, ports, environment,
-and volumes stacks to matching block types.
+Restart value block, each Service's build and healthcheck inputs to Build and
+Healthcheck value blocks, and each Service's dependencies, network references,
+ports, environment, and volumes stacks to matching block types.
 Validation messages appear in the error panel and as warnings on the affected
 blocks; warnings do not prevent YAML generation.
 
@@ -103,23 +104,25 @@ requires an `ID` or `INT` value. Digit-only values are quoted in YAML; other val
 are emitted as entered, so arbitrary YAML-sensitive strings are not generally escaped.
 
 The [text grammar](generate_blockly/input/docker-compose.langium) orders each
-service's image, optional restart policy, optional healthcheck, dependencies,
-network references, ports, environment entries, then volumes, followed by any
-top-level networks after all services. It uses `restart POLICY`,
+service's optional image, optional build context, optional restart policy,
+optional healthcheck, dependencies, network references, ports, environment
+entries, then volumes, followed by any top-level networks after all services.
+It uses `image IMAGE`, `build "CONTEXT"`, `restart POLICY`,
 `healthcheck command "COMMAND" interval "DURATION" timeout "DURATION" retries INT`,
 `depends_on TARGET`, `network TARGET`, `port HOST -> CONTAINER`,
 `environment KEY = VALUE`, `volume "SOURCE" -> "TARGET"`, and
 `network NAME driver DRIVER`. Service names, images, dependency targets, and
 network names use its restricted `ID` token (including simple tags such as
-`node:20`), not the full Docker image-reference syntax. Blockly name/image
-validation only checks nonblank fields.
+`node:20`), not the full Docker image-reference syntax. Blockly name validation
+checks nonblank fields; service validation requires image or build.
 
 Unsupported features include long-form `depends_on` conditions, advanced
 networking options such as long-form service networks, aliases, static IPs,
 `external`, and `ipam`, top-level named volume declarations, long volume syntax,
 Swarm `deploy.restart_policy`, restart retry counts/delays/windows, healthcheck
 `start_period`, `start_interval`, `disable`, `NONE`, multiple test modes, full
-Docker duration grammar, `secrets`, `env_file`, `build`, and commands. Volume
+Docker duration grammar, long-form build properties such as args, target, cache,
+platforms, pull/no-cache, secrets, ssh, labels, network, and commands. Volume
 validation checks only nonblank fields; it does not verify paths or implement
 mount options.
 
@@ -350,7 +353,7 @@ at the end of this section). It exports three functions:
   `generator.statementToCode`) and concatenates them — keywords included —
   back into the rule's original concrete syntax, trimmed of extra
   whitespace where relevant. Docker-specific templates instead emit Compose
-  YAML for Compose, Service, Restart, Healthcheck, Dependency, NetworkRef,
+  YAML for Compose, Service, Build, Restart, Healthcheck, Dependency, NetworkRef,
   Network, Port, Environment, and Volume blocks through handwritten YAML helpers.
   Keep changes to generated files consistent with their templates in
   `blockly-ts-target.js`.

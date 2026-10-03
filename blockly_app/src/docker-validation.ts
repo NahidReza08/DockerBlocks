@@ -85,6 +85,10 @@ export function collectDockerValidationErrors(
       const rawName = String(block.getFieldValue('NAME') ?? '');
       const name = trimFieldValue(rawName);
       const image = trimFieldValue(block.getFieldValue('IMAGE'));
+      const buildBlock = block.getInputTargetBlock('BUILD');
+      const buildContext = buildBlock
+        ? trimFieldValue(buildBlock.getFieldValue('CONTEXT'))
+        : '';
 
       if (name.length === 0) {
         errors.push(requiredError('Service name is required.', block.id));
@@ -94,8 +98,16 @@ export function collectDockerValidationErrors(
         serviceBlocksByName.set(rawName, serviceBlocks);
       }
 
-      if (image.length === 0) {
-        errors.push(requiredError('Image is required', block.id));
+      if (image.length === 0 && buildContext.length === 0) {
+        errors.push(requiredError('Service requires an image or build configuration.', block.id));
+      }
+    }
+
+    if (block.type === 'build') {
+      const context = trimFieldValue(block.getFieldValue('CONTEXT'));
+
+      if (context.length === 0) {
+        errors.push(requiredError('Build context is required.', block.id));
       }
     }
 
