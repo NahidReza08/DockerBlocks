@@ -41,6 +41,9 @@ export function generateDockerServiceYaml(
   const name = block.getFieldValue('NAME') ?? '';
   const image = block.getFieldValue('IMAGE') ?? '';
   const restart = generator.valueToCode(block, 'RESTART', Order.NONE);
+  const healthcheck = generator
+    .valueToCode(block, 'HEALTHCHECK', Order.NONE)
+    .trimEnd();
   const dependencies = generator.statementToCode(block, 'DEPENDS_ON').trimEnd();
   const networks = generator.statementToCode(block, 'NETWORKS').trimEnd();
   const ports = generator.statementToCode(block, 'PORTS').trimEnd();
@@ -55,11 +58,27 @@ export function generateDockerServiceYaml(
 
   return name + ':\n  image: ' + image + '\n' +
     (restart ? '  restart: ' + restart + '\n' : '') +
+    (healthcheck ? '  healthcheck:\n' + healthcheck + '\n' : '') +
     (listedDependencies ? '  depends_on:\n' + listedDependencies + '\n' : '') +
     (listedNetworks ? '  networks:\n' + listedNetworks + '\n' : '') +
     (listedPorts ? '  ports:\n' + listedPorts + '\n' : '') +
     (listedEnvironments ? '  environment:\n' + listedEnvironments + '\n' : '') +
     (listedVolumes ? '  volumes:\n' + listedVolumes + '\n' : '');
+}
+
+export function generateDockerHealthcheckYaml(block: Blockly.Block): [string, Order] {
+  const command = block.getFieldValue('COMMAND') ?? '';
+  const interval = block.getFieldValue('INTERVAL') ?? '';
+  const timeout = block.getFieldValue('TIMEOUT') ?? '';
+  const retries = block.getFieldValue('RETRIES') ?? '';
+
+  return [
+    '    test: ["CMD-SHELL", ' + JSON.stringify(String(command)) + ']\n' +
+      '    interval: ' + interval + '\n' +
+      '    timeout: ' + timeout + '\n' +
+      '    retries: ' + retries,
+    Order.ATOMIC
+  ];
 }
 
 export function generateDockerRestartYaml(block: Blockly.Block): [string, Order] {

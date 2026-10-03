@@ -16,6 +16,7 @@ Service:
     'service' name=ID '{'
         'image' image=ID
         (restart=Restart)?
+        (healthcheck=Healthcheck)?
         (dependencies+=Dependency)*
         (networks+=NetworkRef)*
         (ports+=Port)*
@@ -28,6 +29,13 @@ Dependency:
 
 Restart:
     'restart' policy=('no' | 'always' | 'on-failure' | 'unless-stopped');
+
+Healthcheck:
+    'healthcheck'
+    'command' command=STRING
+    'interval' interval=STRING
+    'timeout' timeout=STRING
+    'retries' retries=INT;
 
 NetworkRef:
     'network' target=ID;

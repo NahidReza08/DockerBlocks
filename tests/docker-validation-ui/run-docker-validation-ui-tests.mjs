@@ -38,6 +38,11 @@ function assertDockerValidationRules(source, context) {
   assert.ok(source.includes('Restart policy must be one of: no, always, on-failure, unless-stopped.'),
     `${context}: malformed Restart policies are rejected`);
   console.log(`[PASS] ${context}: Restart policy validation uses the shared validator`);
+  assert.ok(source.includes("block.type === 'healthcheck'"), `${context}: validation inspects Healthcheck blocks`);
+  assert.ok(source.includes('Healthcheck command is required.'), `${context}: blank Healthcheck commands are rejected`);
+  assert.ok(source.includes('Healthcheck retries must be an integer greater than or equal to 1.'),
+    `${context}: invalid Healthcheck retries are rejected`);
+  console.log(`[PASS] ${context}: Healthcheck validation uses the shared validator`);
   const networkValidation = source.match(/if \(block\.type === 'network'\) \{([\s\S]*?)\n    \}/)?.[1];
   assert.ok(networkValidation, `${context}: validation inspects Network blocks`);
   assert.ok(networkValidation.includes("getFieldValue('NAME')"), `${context}: Network NAME`);

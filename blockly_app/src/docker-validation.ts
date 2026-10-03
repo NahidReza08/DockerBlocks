@@ -45,6 +45,23 @@ function validatePort(
   }
 }
 
+function validateDuration(
+  value: string,
+  requiredMessage: string,
+  formatMessage: string,
+  blockId: string,
+  errors: UiValidationError[]
+) {
+  if (value.length === 0) {
+    errors.push(requiredError(requiredMessage, blockId));
+    return;
+  }
+
+  if (!/^\d+(ms|s|m|h)$/.test(value)) {
+    errors.push(requiredError(formatMessage, blockId));
+  }
+}
+
 function getOwningServiceBlock(block: Blockly.Block): Blockly.Block | null {
   let current = block.getSurroundParent();
 
@@ -103,6 +120,39 @@ export function collectDockerValidationErrors(
           'Restart policy must be one of: no, always, on-failure, unless-stopped.',
           block.id
         ));
+      }
+    }
+
+    if (block.type === 'healthcheck') {
+      const command = trimFieldValue(block.getFieldValue('COMMAND'));
+      const interval = trimFieldValue(block.getFieldValue('INTERVAL'));
+      const timeout = trimFieldValue(block.getFieldValue('TIMEOUT'));
+      const retries = trimFieldValue(block.getFieldValue('RETRIES'));
+
+      if (command.length === 0) {
+        errors.push(requiredError('Healthcheck command is required.', block.id));
+      }
+
+      validateDuration(
+        interval,
+        'Healthcheck interval is required.',
+        'Healthcheck interval must use a supported duration such as 500ms, 10s, 2m, or 1h.',
+        block.id,
+        errors
+      );
+
+      validateDuration(
+        timeout,
+        'Healthcheck timeout is required.',
+        'Healthcheck timeout must use a supported duration such as 500ms, 10s, 2m, or 1h.',
+        block.id,
+        errors
+      );
+
+      if (retries.length === 0) {
+        errors.push(requiredError('Healthcheck retries is required.', block.id));
+      } else if (!/^\d+$/.test(retries) || Number(retries) < 1) {
+        errors.push(requiredError('Healthcheck retries must be an integer greater than or equal to 1.', block.id));
       }
     }
 

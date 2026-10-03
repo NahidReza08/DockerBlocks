@@ -199,6 +199,11 @@ try {
   );
 
   assert.ok(
+    dockerValidationSource.includes("block.type === 'healthcheck'"),
+    'Validation should inspect Docker healthcheck blocks'
+  );
+
+  assert.ok(
     dockerValidationSource.includes("'networkref'"),
     'Validation should inspect service network reference blocks'
   );
@@ -246,6 +251,11 @@ try {
   assert.ok(
     dockerValidationSource.includes("Restart policy must be one of: no, always, on-failure, unless-stopped."),
     'Malformed Docker restart policies should produce the supported-value error'
+  );
+
+  assert.ok(
+    dockerValidationSource.includes("Healthcheck retries must be an integer greater than or equal to 1."),
+    'Malformed Docker healthcheck retries should produce the retry validation error'
   );
 
   assert.ok(
@@ -673,6 +683,77 @@ try {
       assert.equal(generator.workspaceToCode(integrationWorkspace), expectedYaml,
         `${context}: service without restart restores existing YAML exactly`);
       console.log(`[PASS] ${context}: restart policies validate, quote "no", reject malformed values and preserve no-restart YAML`);
+
+      const healthcheck = createBlock('healthcheck', {
+        COMMAND: 'curl -f http://localhost || exit 1',
+        INTERVAL: '30s',
+        TIMEOUT: '10s',
+        RETRIES: '3'
+      });
+      backend.service.getInput('HEALTHCHECK').connection.connect(healthcheck.outputConnection);
+      assert.deepEqual(collectWorkspace(), [], `${context}: valid healthcheck validates cleanly`);
+      const healthcheckYaml = generator.workspaceToCode(integrationWorkspace);
+      assert.equal(
+        healthcheckYaml,
+        expectedYaml.replace(
+          '  backend:\n    image: node:20\n',
+          '  backend:\n    image: node:20\n    healthcheck:\n      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]\n      interval: 30s\n      timeout: 10s\n      retries: 3\n'
+        ),
+        `${context}: healthcheck YAML is generated in the expected CMD-SHELL form`
+      );
+      assert.deepEqual(parse(healthcheckYaml).services.backend.healthcheck, {
+        test: ['CMD-SHELL', 'curl -f http://localhost || exit 1'],
+        interval: '30s',
+        timeout: '10s',
+        retries: 3
+      }, `${context}: healthcheck YAML parses with command, durations and retries`);
+
+      for (const [field, invalid, valid, message] of [
+        ['COMMAND', '', 'curl -f http://localhost || exit 1', 'Healthcheck command is required.'],
+        ['INTERVAL', '   ', '30s', 'Healthcheck interval is required.'],
+        ['TIMEOUT', '', '10s', 'Healthcheck timeout is required.'],
+        ['INTERVAL', '30sec', '30s', 'Healthcheck interval must use a supported duration such as 500ms, 10s, 2m, or 1h.'],
+        ['TIMEOUT', '1d', '10s', 'Healthcheck timeout must use a supported duration such as 500ms, 10s, 2m, or 1h.'],
+        ['RETRIES', '0', '3', 'Healthcheck retries must be an integer greater than or equal to 1.'],
+        ['RETRIES', '-1', '3', 'Healthcheck retries must be an integer greater than or equal to 1.'],
+        ['RETRIES', '1.5', '3', 'Healthcheck retries must be an integer greater than or equal to 1.']
+      ]) {
+        healthcheck.setFieldValue(invalid, field);
+        assert.deepEqual(
+          collectWorkspace().filter((error) => error.blockId === healthcheck.id),
+          [{
+            type: 'validation',
+            message,
+            severity: 'error',
+            blockId: healthcheck.id
+          }],
+          `${context}: invalid healthcheck ${field} value "${invalid}" is rejected`
+        );
+        healthcheck.setFieldValue(valid, field);
+        assert.deepEqual(collectWorkspace(), [], `${context}: correcting healthcheck ${field} clears validation`);
+      }
+
+      const originalHealthcheckGetFieldValue = healthcheck.getFieldValue.bind(healthcheck);
+      healthcheck.getFieldValue = (field) => field === 'RETRIES'
+        ? 'abc'
+        : originalHealthcheckGetFieldValue(field);
+      assert.deepEqual(
+        collectWorkspace().filter((error) => error.blockId === healthcheck.id),
+        [{
+          type: 'validation',
+          message: 'Healthcheck retries must be an integer greater than or equal to 1.',
+          severity: 'error',
+          blockId: healthcheck.id
+        }],
+        `${context}: non-numeric malformed healthcheck retries is rejected`
+      );
+      healthcheck.getFieldValue = originalHealthcheckGetFieldValue;
+      assert.deepEqual(collectWorkspace(), [], `${context}: restoring healthcheck retries clears malformed runtime validation`);
+      healthcheck.dispose(true);
+      assert.deepEqual(collectWorkspace(), [], `${context}: removing healthcheck block restores existing validation clean state`);
+      assert.equal(generator.workspaceToCode(integrationWorkspace), expectedYaml,
+        `${context}: service without healthcheck restores existing YAML exactly`);
+      console.log(`[PASS] ${context}: healthcheck validation covers required fields, durations, retries and clearing`);
 
       const invalidFields = [
         [backend.service, 'IMAGE', '', 'node:20', 'Image is required'],

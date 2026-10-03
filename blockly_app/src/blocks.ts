@@ -53,40 +53,48 @@ export function defineBlocks() {
             "check": "restart"
           }
         ],
-        "message4": "Depends On: %1",
+        "message4": "Healthcheck: %1",
         "args4": [
+          {
+            "type": "input_value",
+            "name": "HEALTHCHECK",
+            "check": "healthcheck"
+          }
+        ],
+        "message5": "Depends On: %1",
+        "args5": [
           {
             "type": "input_statement",
             "name": "DEPENDS_ON",
             "check": "dependency"
           }
         ],
-        "message5": "Networks: %1",
-        "args5": [
+        "message6": "Networks: %1",
+        "args6": [
           {
             "type": "input_statement",
             "name": "NETWORKS",
             "check": "networkref"
           }
         ],
-        "message6": "Ports: %1",
-        "args6": [
+        "message7": "Ports: %1",
+        "args7": [
           {
             "type": "input_statement",
             "name": "PORTS",
             "check": "port"
           }
         ],
-        "message7": "Environment: %1",
-        "args7": [
+        "message8": "Environment: %1",
+        "args8": [
           {
             "type": "input_statement",
             "name": "ENVIRONMENT",
             "check": "environment"
           }
         ],
-        "message8": "Volumes: %1",
-        "args8": [
+        "message9": "Volumes: %1",
+        "args9": [
           {
             "type": "input_statement",
             "name": "VOLUMES",
@@ -141,6 +149,44 @@ export function defineBlocks() {
         ],
         "colour": 200,
         "output": "restart"
+      },
+      {
+        "type": "healthcheck",
+        "message0": "Healthcheck",
+        "message1": "Command: %1",
+        "args1": [
+          {
+            "type": "field_input",
+            "name": "COMMAND",
+            "text": "curl -f http://localhost || exit 1"
+          }
+        ],
+        "message2": "Interval: %1",
+        "args2": [
+          {
+            "type": "field_input",
+            "name": "INTERVAL",
+            "text": "30s"
+          }
+        ],
+        "message3": "Timeout: %1",
+        "args3": [
+          {
+            "type": "field_input",
+            "name": "TIMEOUT",
+            "text": "10s"
+          }
+        ],
+        "message4": "Retries: %1",
+        "args4": [
+          {
+            "type": "field_number",
+            "name": "RETRIES",
+            "value": 3
+          }
+        ],
+        "colour": 120,
+        "output": "healthcheck"
       },
       {
         "type": "networkref",

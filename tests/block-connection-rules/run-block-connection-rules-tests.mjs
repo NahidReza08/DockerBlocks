@@ -81,6 +81,7 @@ async function testDockerConnectionRules() {
     const second = workspace.newBlock('volume');
     const dependency = workspace.newBlock('dependency');
     const restart = workspace.newBlock('restart');
+    const healthcheck = workspace.newBlock('healthcheck');
     const networkRef = workspace.newBlock('networkref');
     const network = workspace.newBlock('network');
     const port = workspace.newBlock('port');
@@ -88,6 +89,7 @@ async function testDockerConnectionRules() {
     const compose = workspace.newBlock('compose');
     const dependencies = service.getInput('DEPENDS_ON');
     const restartInput = service.getInput('RESTART');
+    const healthcheckInput = service.getInput('HEALTHCHECK');
     const networks = service.getInput('NETWORKS');
     const composeNetworks = compose.getInput('NETWORKS');
     const volumes = service.getInput('VOLUMES');
@@ -104,6 +106,12 @@ async function testDockerConnectionRules() {
     restartInput.connection.connect(restart.outputConnection);
     assert.equal(service.getInputTargetBlock('RESTART'), restart);
     console.log('[PASS] Service RESTART accepts Restart value block');
+    assert.ok(healthcheckInput, 'Service has HEALTHCHECK');
+    assert.deepEqual(healthcheckInput.connection.getCheck(), ['healthcheck']);
+    assert.deepEqual(healthcheck.outputConnection.getCheck(), ['healthcheck']);
+    healthcheckInput.connection.connect(healthcheck.outputConnection);
+    assert.equal(service.getInputTargetBlock('HEALTHCHECK'), healthcheck);
+    console.log('[PASS] Service HEALTHCHECK accepts Healthcheck value block');
     assert.ok(networks, 'Service has NETWORKS');
     assert.deepEqual(networks.connection.getCheck(), ['networkref']);
     assert.deepEqual(networkRef.previousConnection.getCheck(), ['networkref']);
@@ -134,8 +142,14 @@ async function testDockerConnectionRules() {
       ['Dependency cannot connect to VOLUMES', volumes.connection, dependency.previousConnection],
       ['Restart cannot connect to PORTS', service.getInput('PORTS').connection, restart.outputConnection],
       ['Restart cannot connect to NETWORKS', networks.connection, restart.outputConnection],
+      ['Restart cannot connect to HEALTHCHECK', healthcheckInput.connection, restart.outputConnection],
+      ['Healthcheck cannot connect to RESTART', restartInput.connection, healthcheck.outputConnection],
+      ['Healthcheck cannot connect to PORTS', service.getInput('PORTS').connection, healthcheck.outputConnection],
+      ['Healthcheck cannot connect to NETWORKS', networks.connection, healthcheck.outputConnection],
       ['Dependency cannot connect to RESTART', restartInput.connection, dependency.previousConnection],
+      ['Dependency cannot connect to HEALTHCHECK', healthcheckInput.connection, dependency.previousConnection],
       ['NetworkRef cannot connect to RESTART', restartInput.connection, networkRef.previousConnection],
+      ['NetworkRef cannot connect to HEALTHCHECK', healthcheckInput.connection, networkRef.previousConnection],
       ['NetworkRef cannot connect to PORTS', service.getInput('PORTS').connection, networkRef.previousConnection],
       ['NetworkRef cannot connect to ENVIRONMENT', service.getInput('ENVIRONMENT').connection, networkRef.previousConnection],
       ['NetworkRef cannot connect to VOLUMES', volumes.connection, networkRef.previousConnection],
@@ -182,6 +196,10 @@ async function testDockerConnectionRules() {
     (block) => block.type === 'restart'
   );
 
+  const healthcheck = blocks.find(
+    (block) => block.type === 'healthcheck'
+  );
+
   const networkRef = blocks.find(
     (block) => block.type === 'networkref'
   );
@@ -217,6 +235,11 @@ async function testDockerConnectionRules() {
   assert.ok(
     restart,
     'Restart block should be generated.'
+  );
+
+  assert.ok(
+    healthcheck,
+    'Healthcheck block should be generated.'
   );
 
   assert.ok(
@@ -324,6 +347,50 @@ async function testDockerConnectionRules() {
       ['unless-stopped', 'unless-stopped']
     ],
     'Restart POLICY dropdown should contain exactly the supported Compose values.'
+  );
+
+  const serviceHealthcheckInput = findInput(service, 'HEALTHCHECK');
+
+  assert.ok(
+    serviceHealthcheckInput,
+    'Service should expose a HEALTHCHECK value input for an optional Healthcheck block.'
+  );
+
+  assert.equal(
+    serviceHealthcheckInput.type,
+    'input_value',
+    'Service HEALTHCHECK input should be a Blockly value input.'
+  );
+
+  assert.equal(
+    serviceHealthcheckInput.check,
+    'healthcheck',
+    'Service HEALTHCHECK input should only accept Healthcheck blocks.'
+  );
+
+  assert.equal(
+    healthcheck.output,
+    'healthcheck',
+    'Healthcheck should output only into a Healthcheck-compatible value input.'
+  );
+
+  assert.deepEqual(
+    [
+      ['COMMAND', 'field_input', 'curl -f http://localhost || exit 1'],
+      ['INTERVAL', 'field_input', '30s'],
+      ['TIMEOUT', 'field_input', '10s'],
+      ['RETRIES', 'field_number', 3]
+    ].map(([name, type, defaultValue]) => {
+      const input = findInput(healthcheck, name);
+      return [input?.name, input?.type, input?.text ?? input?.value, defaultValue];
+    }),
+    [
+      ['COMMAND', 'field_input', 'curl -f http://localhost || exit 1', 'curl -f http://localhost || exit 1'],
+      ['INTERVAL', 'field_input', '30s', '30s'],
+      ['TIMEOUT', 'field_input', '10s', '10s'],
+      ['RETRIES', 'field_number', 3, 3]
+    ],
+    'Healthcheck should expose beginner-friendly defaults for command, interval, timeout and retries.'
   );
 
   const serviceNetworksInput = findInput(service, 'NETWORKS');

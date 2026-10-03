@@ -32,6 +32,10 @@ bootstrapBlocklyApp({
         },
         {
           "kind": "block",
+          "type": "healthcheck"
+        },
+        {
+          "kind": "block",
           "type": "networkref"
         },
         {

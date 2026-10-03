@@ -157,6 +157,26 @@ try {
   vm.runInContext('app.handleWorkspaceChange()', context);
   clean();
   assert.equal(networkRef.lastValidationWarning, null);
+  const healthcheck = workspace.newBlock('healthcheck');
+  healthcheck.setFieldValue('', 'COMMAND');
+  healthcheck.setFieldValue('30s', 'INTERVAL');
+  healthcheck.setFieldValue('10s', 'TIMEOUT');
+  healthcheck.setFieldValue('3', 'RETRIES');
+  duplicateA.getInput('HEALTHCHECK').connection.connect(healthcheck.outputConnection);
+  healthcheck.lastValidationWarning = undefined;
+  healthcheck.setWarningText = (text, id) => {
+    if (id === 'captured-validation-error') {
+      healthcheck.lastValidationWarning = text;
+    }
+  };
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  assert.equal(elements.errorOutput.children.length, 1, 'Healthcheck validation renders one error');
+  assert.equal(elements.errorOutput.children[0].children[1].textContent, 'Healthcheck command is required.');
+  assert.equal(healthcheck.lastValidationWarning, 'Healthcheck command is required.');
+  healthcheck.setFieldValue('curl -f http://localhost || exit 1', 'COMMAND');
+  vm.runInContext('app.handleWorkspaceChange()', context);
+  clean();
+  assert.equal(healthcheck.lastValidationWarning, null);
   click('clearWorkspace');
   clean();
   for (let i = 0; i < 2; i++) {

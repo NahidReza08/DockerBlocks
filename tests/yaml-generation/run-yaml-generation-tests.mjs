@@ -435,6 +435,106 @@ async function testComposeYamlGeneration() {
 
     console.log('✓ restart policy grammar and YAML generated');
 
+    console.log('Testing Docker Compose healthcheck grammar and YAML...');
+
+    const noHealthcheckParse = grammarServices.parser.LangiumParser.parse(noRestartDsl);
+    assert.deepEqual(noHealthcheckParse.lexerErrors, [], 'Service without healthcheck should have no lexer errors');
+    assert.deepEqual(noHealthcheckParse.parserErrors, [], 'Service without healthcheck should parse');
+
+    const healthcheckDsl =
+      'compose {\n' +
+      '  service web {\n' +
+      '    image nginx\n' +
+      '    healthcheck command "curl -f http://localhost || exit 1" interval "30s" timeout "10s" retries 3\n' +
+      '  }\n' +
+      '}\n';
+    const healthcheckParse = grammarServices.parser.LangiumParser.parse(healthcheckDsl);
+    assert.deepEqual(healthcheckParse.lexerErrors, [], 'Healthcheck example should have no lexer errors');
+    assert.deepEqual(healthcheckParse.parserErrors, [], 'Healthcheck example should parse');
+    assert.deepEqual({
+      command: healthcheckParse.value.services[0].healthcheck.command,
+      interval: healthcheckParse.value.services[0].healthcheck.interval,
+      timeout: healthcheckParse.value.services[0].healthcheck.timeout,
+      retries: healthcheckParse.value.services[0].healthcheck.retries
+    }, {
+      command: 'curl -f http://localhost || exit 1',
+      interval: '30s',
+      timeout: '10s',
+      retries: 3
+    });
+
+    const healthcheckBlockDefinition = blockDefinitions.find((block) => block.type === 'healthcheck');
+    assert.ok(healthcheckBlockDefinition, 'Generated blocks should include healthcheck');
+    assert.equal(
+      healthcheckBlockDefinition.output,
+      'healthcheck',
+      'Healthcheck should be a value block for the Service HEALTHCHECK input.'
+    );
+    assert.deepEqual(
+      [
+        ['COMMAND', 'field_input', 'curl -f http://localhost || exit 1'],
+        ['INTERVAL', 'field_input', '30s'],
+        ['TIMEOUT', 'field_input', '10s'],
+        ['RETRIES', 'field_number', 3]
+      ].map(([name, type, defaultValue]) => {
+        const input = blockInputs(healthcheckBlockDefinition).find((candidate) => candidate.name === name);
+        return [input?.name, input?.type, input?.text ?? input?.value, defaultValue];
+      }),
+      [
+        ['COMMAND', 'field_input', 'curl -f http://localhost || exit 1', 'curl -f http://localhost || exit 1'],
+        ['INTERVAL', 'field_input', '30s', '30s'],
+        ['TIMEOUT', 'field_input', '10s', '10s'],
+        ['RETRIES', 'field_number', 3, 3]
+      ],
+      'Healthcheck block should expose command, interval, timeout and retries defaults.'
+    );
+
+    const healthcheckWorkspace = new Blockly.Workspace();
+    try {
+      const healthcheckCompose = healthcheckWorkspace.newBlock('compose');
+      const healthcheckService = healthcheckWorkspace.newBlock('service');
+      healthcheckService.setFieldValue('web', 'NAME');
+      healthcheckService.setFieldValue('nginx', 'IMAGE');
+      healthcheckCompose.getInput('SERVICES').connection.connect(healthcheckService.previousConnection);
+      const healthcheck = healthcheckWorkspace.newBlock('healthcheck');
+      const command = 'curl -f "http://localhost:8080/health?ready=true" || exit 1';
+      healthcheck.setFieldValue(command, 'COMMAND');
+      healthcheck.setFieldValue('30s', 'INTERVAL');
+      healthcheck.setFieldValue('10s', 'TIMEOUT');
+      healthcheck.setFieldValue('3', 'RETRIES');
+      healthcheckService.getInput('HEALTHCHECK').connection.connect(healthcheck.outputConnection);
+      const healthcheckYaml = generator.workspaceToCode(healthcheckWorkspace);
+      assert.equal(
+        healthcheckYaml,
+        'services:\n' +
+        '  web:\n' +
+        '    image: nginx\n' +
+        '    healthcheck:\n' +
+        '      test: ["CMD-SHELL", ' + JSON.stringify(command) + ']\n' +
+        '      interval: 30s\n' +
+        '      timeout: 10s\n' +
+        '      retries: 3\n',
+        'Healthcheck should generate stable CMD-SHELL YAML with escaped command content.'
+      );
+      assert.deepEqual(parse(healthcheckYaml), {
+        services: {
+          web: {
+            image: 'nginx',
+            healthcheck: {
+              test: ['CMD-SHELL', command],
+              interval: '30s',
+              timeout: '10s',
+              retries: 3
+            }
+          }
+        }
+      }, 'Healthcheck YAML should parse with the intended command array and timing values.');
+    } finally {
+      healthcheckWorkspace.dispose();
+    }
+
+    console.log('✓ healthcheck grammar and YAML generated');
+
     console.log('Testing Docker Compose depends_on grammar and YAML...');
 
     const oneDependencyDsl =

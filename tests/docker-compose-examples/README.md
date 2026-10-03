@@ -33,7 +33,7 @@ D02 and D03 represent invalid Docker service configurations that should produce 
 
 ## Multi-service demo (D04)
 
-Open [D04-valid-multi-service.dsl](D04-valid-multi-service.dsl) for an example of all supported Docker block types:
+Open [D04-valid-multi-service.dsl](D04-valid-multi-service.dsl) for an example of the core Docker block types:
 two named services and images, port mappings, environment entries, and short volume mappings.
 The frontend maps port 8080 to 80 and mounts `./frontend` at `/usr/share/nginx/html`.
 The backend maps port 3000 to 3000 and mounts `./data` at `/app/data`.
