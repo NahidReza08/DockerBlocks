@@ -32,6 +32,9 @@ function element() {
     hidden: false,
     value: '',
     title: '',
+    attributes: {},
+    style: {},
+    dataset: {},
     classList: {
       values: new Set(),
       add(...names) { names.forEach(name => this.values.add(name)); },
@@ -42,7 +45,17 @@ function element() {
     get lastElementChild() { return this.children.at(-1) ?? null; },
     replaceChildren() { this.children = []; this.textContent = ''; },
     addEventListener(type, handler) { this.listeners[type] = handler; },
-    click() { this.clicked = true; },
+    setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'title') this.title = String(value); },
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    getBoundingClientRect() { return this.rect ?? { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
+    cloneNode() {
+      const clone = element();
+      clone.className = this.className;
+      clone.textContent = this.textContent;
+      clone.dataset = { ...this.dataset };
+      return clone;
+    },
+    click() { this.clicked = true; this.listeners.click?.(); },
     remove() { this.removed = true; }
   };
 }
@@ -63,29 +76,35 @@ function validationMessages() {
 }
 
 const ids = [
-  'codeOutput', 'errorOutput', 'actionStatus', 'yamlStatus',
+  'codeOutput', 'lineNumbers', 'errorOutput', 'actionStatus', 'yamlStatus',
   'summaryEmpty', 'summaryServicesItem', 'summaryNetworksItem', 'summaryVolumesItem',
   'summaryDependenciesItem', 'summaryHealthchecksItem',
+  'summaryEmptyTitle', 'summaryEmptyMessage', 'blocklyDiv',
   'summaryServices', 'summaryNetworks', 'summaryVolumes', 'summaryDependencies', 'summaryHealthchecks',
   'exampleSelect', 'loadExample', 'validateWorkspace', 'clearWorkspace', 'copyYaml', 'downloadYaml'
 ];
 const elements = Object.fromEntries(ids.map(id => [id, element()]));
-elements.copyYaml.textContent = 'Copy';
+elements.blocklyDiv.rect = { left: 100, top: 100, right: 700, bottom: 500, width: 600, height: 400 };
+elements.copyYaml.setAttribute('title', 'Copy YAML');
+elements.copyYaml.setAttribute('aria-label', 'Copy YAML');
+elements.downloadYaml.setAttribute('title', 'Download YAML');
+elements.downloadYaml.setAttribute('aria-label', 'Download YAML');
 const paletteItems = [
-  'compose', 'service', 'network', 'service', 'build', 'port',
-  'environment', 'volume', 'dependency', 'networkref', 'restart', 'healthcheck'
+  'compose', 'service', 'service', 'build', 'port', 'environment',
+  'volume', 'dependency', 'networkref', 'restart', 'healthcheck', 'network'
 ].map(type => {
   const item = element();
   item.dataset = { blockType: type };
   return item;
 });
-paletteItems[3].dataset.paletteFeature = 'image';
+paletteItems[2].dataset.paletteFeature = 'image';
 const workspace = new Blockly.Workspace();
 workspace.scroll = () => {};
 const anchors = [];
 const downloads = [];
 const revoked = [];
 const timers = [];
+const documentListeners = {};
 let copied;
 let injectedOptions;
 const navigator = { clipboard: { async writeText(text) { copied = text; } } };
@@ -99,6 +118,10 @@ const context = vm.createContext({
   setTimeout(callback, delay) { timers.push({ callback, delay }); },
   document: {
     getElementById: id => elements[id], body: element(),
+    addEventListener(type, handler) { documentListeners[type] = handler; },
+    removeEventListener(type, handler) {
+      if (documentListeners[type] === handler) delete documentListeners[type];
+    },
     querySelectorAll(selector) {
       return selector === '[data-block-type]' ? paletteItems : [];
     },
@@ -110,6 +133,20 @@ const context = vm.createContext({
   }
 });
 const click = id => elements[id].listeners.click();
+const keyboardCreate = (item, key = 'Enter') => item.listeners.keydown({
+  key,
+  preventDefault() { this.defaultPrevented = true; }
+});
+const pointerEvent = (clientX, clientY) => ({
+  button: 0,
+  clientX,
+  clientY,
+  preventDefault() { this.defaultPrevented = true; }
+});
+const dragPaletteItem = (item, clientX, clientY) => {
+  item.listeners.pointerdown(pointerEvent(12, 12));
+  documentListeners.pointerup(pointerEvent(clientX, clientY));
+};
 const clean = () => {
   assert.ok(
     elements.errorOutput.children.length >= 1,
@@ -174,16 +211,50 @@ try {
     'Example selector exposes the polished demo examples'
   );
   assert.equal(elements.exampleSelect.value, 'simple-web-service');
-  assert.equal(elements.codeOutput.textContent, 'services:\n', 'Initial Compose root emits the services header');
-  assert.equal(elements.yamlStatus.textContent, 'Incomplete configuration');
+  assert.equal(elements.codeOutput.textContent, '', 'Initial workspace has no generated YAML');
+  assert.equal(elements.lineNumbers?.textContent ?? '', '');
+  assert.equal(elements.yamlStatus.textContent, 'Invalid');
   assert.equal(elements.summaryServices.textContent, '0');
   assert.equal(elements.summaryEmpty.hidden, false);
   assert.equal(elements.summaryServicesItem.hidden, true);
-  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'compose').length, 1);
-  assert.match(validationText(), /No configuration to validate yet/);
-  assert.match(validationText(), /Add a Service block/);
+  assert.equal(workspace.getAllBlocks(false).length, 0);
+  assert.match(validationText(), /No configuration yet/);
+  assert.match(validationText(), /Start by adding a Compose block/);
   assert.equal(elements.errorOutput.children[0].className, 'validation-empty-state');
   assert.equal(validationText().includes('Ports valid'), false, 'Empty workspace does not show unrelated green validation');
+
+  paletteItems[1].click();
+  assert.equal(workspace.getAllBlocks(false).length, 0, 'Clicking a palette row does not create a block');
+  dragPaletteItem(paletteItems[1], 20, 20);
+  assert.equal(workspace.getAllBlocks(false).length, 0, 'Dropping outside the workspace creates nothing');
+  dragPaletteItem(paletteItems[0], 280, 180);
+  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'compose').length, 1,
+    'Dragging Compose into the workspace creates a Compose block');
+  assert.equal(elements.codeOutput.textContent, 'services:\n');
+  assert.match(validationText(), /Compose structure is incomplete/);
+  assert.match(validationText(), /Add at least one Service block/);
+  keyboardCreate(paletteItems[1], 'Enter');
+  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'service').length, 1,
+    'Keyboard activation still creates blocks for accessibility');
+  dragPaletteItem(paletteItems[11], 320, 220);
+  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'network').length, 1,
+    'Multiple palette blocks can be dragged in');
+  click('clearWorkspace');
+  dragPaletteItem(paletteItems[11], 320, 220);
+  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'network').length, 1,
+    'A resource-only workspace can be represented');
+  assert.equal(elements.summaryNetworksItem.hidden, false);
+  assert.equal(elements.summaryEmpty.hidden, false);
+  assert.match(elements.summaryEmptyTitle.textContent, /No valid service configuration yet/);
+  assert.match(validationText(), /No valid service configuration yet/);
+  click('clearWorkspace');
+  assert.equal(workspace.getAllBlocks(false).length, 0);
+  assert.equal(elements.codeOutput.textContent, '');
+  assert.equal(elements.yamlStatus.textContent, 'Invalid');
+  assert.equal(elements.summaryEmpty.hidden, false);
+  assert.match(validationText(), /No configuration yet/);
+
+  keyboardCreate(paletteItems[0], 'Enter');
   const initialCompose = workspace
     .getAllBlocks(false)
     .find(block => block.type === 'compose');
@@ -205,25 +276,27 @@ try {
   ]);
   assert.match(invalid.lastValidationWarning, /Service name is required/);
   assert.match(invalid.lastValidationWarning, /Service requires an image or build configuration/);
-  assert.equal(elements.yamlStatus.textContent, 'Validation errors');
+  assert.equal(elements.yamlStatus.textContent, 'Invalid');
   assert.equal(validationText().includes('Healthcheck valid'), false, 'Invalid state omits unrelated success rows');
   invalid.setFieldValue('web', 'NAME');
   invalid.setFieldValue('nginx:latest', 'IMAGE');
   vm.runInContext('app.handleWorkspaceChange()', context);
   assert.equal(invalid.lastValidationWarning, null);
-  assert.equal(elements.yamlStatus.textContent, 'Valid Compose');
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
   assert.equal(validationText().includes('No errors found.'), true);
   assert.equal(validationText().includes('Ports valid'), false, 'No ports means no Ports valid row');
   click('clearWorkspace');
-  assert.equal(workspace.getAllBlocks(false).length, 1);
-  assert.equal(elements.codeOutput.textContent, 'services:\n');
-  assert.equal(elements.yamlStatus.textContent, 'Incomplete configuration');
+  assert.equal(workspace.getAllBlocks(false).length, 0);
+  assert.equal(elements.codeOutput.textContent, '');
+  assert.equal(elements.yamlStatus.textContent, 'Invalid');
+  assert.equal(elements.exampleSelect.value, 'simple-web-service');
   assert.equal(elements.summaryEmpty.hidden, false);
   clean();
   // A queued Blockly event must not bring cleared errors back.
   vm.runInContext('app.handleWorkspaceChange()', context);
   clean();
   click('clearWorkspace');
+  keyboardCreate(paletteItems[0], 'Enter');
   const compose = workspace
     .getAllBlocks(false)
     .find(block => block.type === 'compose');
@@ -346,7 +419,7 @@ try {
     assert.equal(elements.summaryVolumesItem.hidden, true);
     assert.equal(elements.summaryDependenciesItem.hidden, true);
     assert.equal(elements.summaryHealthchecksItem.hidden, true);
-    assert.equal(elements.yamlStatus.textContent, 'Valid Compose');
+    assert.equal(elements.yamlStatus.textContent, 'Valid');
     assert.equal(validationText().includes('No errors found.'), true);
     assert.equal(validationText().includes('Your Docker Compose configuration is valid.'), true);
     assert.equal(validationText().includes('Ports valid'), false);
@@ -368,7 +441,7 @@ try {
   assert.equal(elements.summaryVolumesItem.hidden, false);
   assert.equal(elements.summaryDependenciesItem.hidden, false);
   assert.equal(elements.summaryHealthchecksItem.hidden, false);
-  assert.equal(elements.yamlStatus.textContent, 'Valid Compose');
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
   assert.equal(validationText().includes('No errors found.'), true);
   assert.equal(validationText().includes('Your Docker Compose configuration is valid.'), true);
   assert.equal(validationText().includes('Build settings valid'), false);
@@ -388,10 +461,10 @@ try {
   const validYaml = elements.codeOutput.textContent;
   await click('copyYaml');
   assert.equal(copied, validYaml, 'Copy preserves valid YAML content');
-  assert.equal(elements.copyYaml.textContent, '✓ Copied');
+  assert.equal(elements.copyYaml.getAttribute('title'), 'YAML copied');
   assert.equal(timers.at(-1).delay, 1400, 'Copy feedback resets after a short delay');
   timers.pop().callback();
-  assert.match(elements.copyYaml.textContent, /Copy/);
+  assert.equal(elements.copyYaml.getAttribute('title'), 'Copy YAML');
   click('downloadYaml');
   assert.equal(await downloads.at(-1).text(), validYaml, 'Download preserves valid YAML content');
   assert.equal(anchors.at(-1).download, 'docker-compose.yml');
@@ -402,9 +475,10 @@ try {
 
   click('clearWorkspace');
   const clearedYaml = elements.codeOutput.textContent;
+  assert.equal(clearedYaml, '', 'Clear leaves no partial services/networks YAML behind');
   await click('copyYaml');
   assert.equal(copied, clearedYaml, 'Copy preserves cleared initial YAML content');
-  assert.equal(elements.copyYaml.textContent, '✓ Copied');
+  assert.equal(elements.copyYaml.getAttribute('aria-label'), 'YAML copied');
   timers.pop().callback();
   click('downloadYaml');
   assert.equal(await downloads.at(-1).text(), clearedYaml, 'Download preserves cleared initial YAML content');
@@ -423,7 +497,7 @@ try {
     assert.ok(html.includes(label));
   }
   for (const label of [
-    'Structure', 'Service Configuration', 'Compose', 'Service', 'Network',
+    'Structure', 'Service Configuration', 'Resources', 'Compose', 'Service', 'Network',
     'Image', 'Build', 'Ports', 'Environment', 'Volumes', 'Depends On',
     'Networks', 'Restart', 'Healthcheck'
   ]) {

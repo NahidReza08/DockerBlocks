@@ -92,9 +92,9 @@ function showNoValidationErrors(
 
   errorOutput.replaceChildren();
 
-  const hasService = workspace
-    .getAllBlocks(false)
-    .some((block) => block.type === 'service');
+  const blocks = workspace.getAllBlocks(false);
+  const hasCompose = blocks.some((block) => block.type === 'compose');
+  const hasService = blocks.some((block) => block.type === 'service');
 
   if (!hasService) {
     const empty = document.createElement('div');
@@ -107,11 +107,27 @@ function showNoValidationErrors(
 
     const copy = document.createElement('div');
     copy.className = 'validation-empty-copy';
-    copy.appendChild(createTextElement('validation-empty-title', 'No configuration to validate yet.'));
-    copy.appendChild(createTextElement(
-      'validation-empty-message',
-      'Add a Service block to create a valid Docker Compose configuration.'
-    ));
+
+    if (blocks.length === 0) {
+      copy.appendChild(createTextElement('validation-empty-title', 'No configuration yet.'));
+      copy.appendChild(createTextElement(
+        'validation-empty-message',
+        'Start by adding a Compose block.'
+      ));
+    } else if (hasCompose) {
+      copy.appendChild(createTextElement('validation-empty-title', 'Compose structure is incomplete.'));
+      copy.appendChild(createTextElement(
+        'validation-empty-message',
+        'Add at least one Service block.'
+      ));
+    } else {
+      copy.appendChild(createTextElement('validation-empty-title', 'No valid service configuration yet.'));
+      copy.appendChild(createTextElement(
+        'validation-empty-message',
+        'Add at least one Service block to generate a Docker Compose application.'
+      ));
+    }
+
     empty.appendChild(copy);
 
     errorOutput.appendChild(empty);

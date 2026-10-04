@@ -273,6 +273,11 @@
         background: #ecfdf5;
       }
 
+      .palette-group.resources .palette-group-header {
+        color: #0e7490;
+        background: #ecfeff;
+      }
+
       .palette-item {
         width: 100%;
         height: 33px;
@@ -285,10 +290,29 @@
         background: var(--panel);
         color: var(--text);
         text-align: left;
+        cursor: grab;
+        touch-action: none;
       }
 
       .palette-item:hover {
         background: #f1f5f9;
+      }
+
+      .palette-item:active { cursor: grabbing; }
+
+      .palette-drag-preview {
+        position: fixed;
+        z-index: 1000;
+        width: 190px;
+        pointer-events: none;
+        opacity: 0.86;
+        transform: translate(10px, 10px);
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+      }
+
+      .palette-dragging #blocklyDiv {
+        outline: 2px dashed rgba(37, 99, 235, 0.3);
+        outline-offset: -6px;
       }
 
       .palette-item.compose { color: var(--purple); }
@@ -343,16 +367,16 @@
 
       .yaml-panel .panel-title {
         flex: 1 1 auto;
-        min-width: 160px;
+        min-width: 142px;
       }
 
       .status-pill {
-        min-height: 26px;
+        min-height: 24px;
         display: inline-flex;
         align-items: center;
         flex: 0 0 auto;
         gap: 6px;
-        padding: 4px 9px;
+        padding: 4px 8px;
         border: 1px solid #bfdbfe;
         border-radius: 999px;
         background: #eff6ff;
@@ -381,18 +405,24 @@
       }
 
       .yaml-button {
-        height: 31px;
-        padding: 7px 10px;
+        width: 28px;
+        height: 28px;
+        padding: 0;
         display: inline-flex;
         align-items: center;
+        justify-content: center;
         flex: 0 0 auto;
-        gap: 6px;
         background: var(--blue);
         color: #ffffff;
         border-radius: 6px;
         font-size: 12px;
         font-weight: 700;
         white-space: nowrap;
+      }
+
+      .yaml-button svg {
+        width: 15px;
+        height: 15px;
       }
 
       .yaml-button:hover { background: var(--blue-hover); }
@@ -435,9 +465,10 @@
       }
 
       #codeOutput:empty::before {
-        content: "Your generated docker-compose.yml will appear here.";
+        content: "No configuration generated yet.\AStart by adding a Compose block.";
         color: var(--muted);
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        white-space: pre-line;
       }
 
       #actionStatus {
@@ -710,7 +741,6 @@
               <div class="palette-group-header"><svg><use href="#icon-layers"></use></svg>Structure</div>
               <button class="palette-item compose" type="button" data-block-type="compose"><svg><use href="#icon-layers"></use></svg><span>Compose</span></button>
               <button class="palette-item service" type="button" data-block-type="service"><svg><use href="#icon-cube"></use></svg><span>Service</span></button>
-              <button class="palette-item network" type="button" data-block-type="network"><svg><use href="#icon-network"></use></svg><span>Network</span></button>
             </section>
 
             <section class="palette-group service-config" aria-label="Service Configuration blocks">
@@ -724,6 +754,11 @@
               <button class="palette-item networkref" type="button" data-block-type="networkref"><svg><use href="#icon-network"></use></svg><span>Networks</span></button>
               <button class="palette-item restart" type="button" data-block-type="restart"><svg><use href="#icon-refresh"></use></svg><span>Restart</span></button>
               <button class="palette-item healthcheck" type="button" data-block-type="healthcheck"><svg><use href="#icon-heart"></use></svg><span>Healthcheck</span></button>
+            </section>
+
+            <section class="palette-group resources" aria-label="Top-level Docker Compose resource blocks">
+              <div class="palette-group-header"><svg><use href="#icon-network"></use></svg>Resources</div>
+              <button class="palette-item network" type="button" data-block-type="network"><svg><use href="#icon-network"></use></svg><span>Network</span></button>
             </section>
           </div>
         </aside>
@@ -739,9 +774,9 @@
           <div class="panel-header">
             <div class="panel-title"><svg><use href="#icon-file"></use></svg>docker-compose.yml</div>
             <div class="yaml-header-actions">
-              <div id="yamlStatus" class="status-pill neutral" aria-live="polite">Waiting for configuration</div>
-              <button id="copyYaml" class="yaml-button" type="button"><svg><use href="#icon-copy"></use></svg>Copy</button>
-              <button id="downloadYaml" class="yaml-button" type="button"><svg><use href="#icon-download"></use></svg>Download</button>
+              <div id="yamlStatus" class="status-pill neutral" aria-live="polite">Invalid</div>
+              <button id="copyYaml" class="yaml-button" type="button" title="Copy YAML" aria-label="Copy YAML"><svg><use href="#icon-copy"></use></svg></button>
+              <button id="downloadYaml" class="yaml-button" type="button" title="Download YAML" aria-label="Download YAML"><svg><use href="#icon-download"></use></svg></button>
             </div>
           </div>
           <div class="yaml-body">
@@ -768,8 +803,8 @@
             <div id="summaryEmpty" class="summary-empty">
               <span class="summary-empty-icon"><svg><use href="#icon-cube"></use></svg></span>
               <div>
-                <div class="summary-empty-title">No configured services yet.</div>
-                <div class="summary-empty-message">Add a Service block from the toolbox to get started.</div>
+                <div id="summaryEmptyTitle" class="summary-empty-title">No configured services yet.</div>
+                <div id="summaryEmptyMessage" class="summary-empty-message">Start by adding a Service block.</div>
               </div>
             </div>
             <div id="summaryServicesItem" class="summary-chip service" hidden>

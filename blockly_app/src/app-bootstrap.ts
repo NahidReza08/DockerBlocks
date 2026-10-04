@@ -20,6 +20,11 @@ type BootstrapOptions = {
 
 type UiState = 'empty' | 'incomplete' | 'valid' | 'invalid';
 
+type PaletteDropPosition = {
+  clientX: number;
+  clientY: number;
+};
+
 export function bootstrapBlocklyApp({
   toolbox,
   generator,
@@ -54,6 +59,7 @@ export function bootstrapBlocklyApp({
   const errorOutput = document.getElementById('errorOutput');
   const actionStatus = document.getElementById('actionStatus');
   const yamlStatus = document.getElementById('yamlStatus');
+  const blocklyDiv = document.getElementById('blocklyDiv');
   const exampleSelect = document.getElementById('exampleSelect') as HTMLSelectElement | null;
   const copyYamlButton = document.getElementById('copyYaml');
   const validationUi = createValidationUi(workspace, errorOutput);
@@ -121,26 +127,14 @@ export function bootstrapBlocklyApp({
 
     yamlStatus.classList.remove('invalid', 'neutral', 'incomplete', 'valid');
 
-    if (state === 'empty') {
-      yamlStatus.textContent = 'Waiting for configuration';
-      yamlStatus.classList.add('neutral');
+    if (state === 'valid') {
+      yamlStatus.textContent = 'Valid';
+      yamlStatus.classList.add('valid');
       return;
     }
 
-    if (state === 'incomplete') {
-      yamlStatus.textContent = 'Incomplete configuration';
-      yamlStatus.classList.add('incomplete');
-      return;
-    }
-
-    if (state === 'invalid') {
-      yamlStatus.textContent = 'Validation errors';
-      yamlStatus.classList.add('invalid');
-      return;
-    }
-
-    yamlStatus.textContent = 'Valid Compose';
-    yamlStatus.classList.add('valid');
+    yamlStatus.textContent = 'Invalid';
+    yamlStatus.classList.add(state === 'invalid' ? 'invalid' : 'incomplete');
   }
 
   function updateWorkspaceSummary() {
@@ -160,10 +154,51 @@ export function bootstrapBlocklyApp({
     });
 
     const emptySummary = document.getElementById('summaryEmpty');
-    if (emptySummary) emptySummary.hidden = visibleCount > 0;
+    if (emptySummary) emptySummary.hidden = counts.service > 0;
+
+    const emptySummaryTitle = document.getElementById('summaryEmptyTitle');
+    const emptySummaryMessage = document.getElementById('summaryEmptyMessage');
+
+    if (emptySummaryTitle && emptySummaryMessage) {
+      if (visibleCount > 0) {
+        emptySummaryTitle.textContent = 'No valid service configuration yet.';
+        emptySummaryMessage.textContent = 'Add at least one Service block.';
+      } else {
+        emptySummaryTitle.textContent = 'No configured services yet.';
+        emptySummaryMessage.textContent = 'Start by adding a Service block.';
+      }
+    }
   }
 
-  function addPaletteBlock(blockType: string, feature?: string) {
+  function getDropWorkspaceCoordinate(position?: PaletteDropPosition) {
+    if (!position) return { x: 48, y: 48 + workspace.getAllBlocks(false).length * 12 };
+
+    const maybeSvgWorkspace = workspace as Blockly.WorkspaceSvg & {
+      getInjectionDiv?: () => HTMLElement;
+    };
+    if (typeof maybeSvgWorkspace.getInjectionDiv === 'function' &&
+      Blockly.utils?.svgMath?.screenToWsCoordinates) {
+      const coordinate = new Blockly.utils.Coordinate(position.clientX, position.clientY);
+      return Blockly.utils.svgMath.screenToWsCoordinates(maybeSvgWorkspace, coordinate);
+    }
+
+    const rect = blocklyDiv?.getBoundingClientRect();
+    return rect
+      ? { x: position.clientX - rect.left, y: position.clientY - rect.top }
+      : { x: position.clientX, y: position.clientY };
+  }
+
+  function isInsideWorkspace(position: PaletteDropPosition) {
+    const rect = blocklyDiv?.getBoundingClientRect();
+    if (!rect) return false;
+
+    return position.clientX >= rect.left &&
+      position.clientX <= rect.right &&
+      position.clientY >= rect.top &&
+      position.clientY <= rect.bottom;
+  }
+
+  function addPaletteBlock(blockType: string, feature?: string, position?: PaletteDropPosition) {
     try {
       const block = workspace.newBlock(blockType);
 
@@ -172,30 +207,11 @@ export function bootstrapBlocklyApp({
         block.setFieldValue('nginx:latest', 'IMAGE');
       }
 
-      (workspace as Blockly.Workspace & { scroll?: (x: number, y: number) => void }).scroll?.(0, 0);
       block.initSvg?.();
       block.render?.();
-      block.moveBy(48, 48 + workspace.getAllBlocks(false).length * 12);
-      const composeBlock = workspace
-        .getAllBlocks(false)
-        .find((candidate) => candidate.type === 'compose');
-
-      if (composeBlock && block.type === 'service' && block.previousConnection) {
-        const servicesInput = composeBlock.getInput('SERVICES')?.connection;
-        if (servicesInput && !servicesInput.targetConnection) {
-          servicesInput.connect(block.previousConnection);
-        }
-      }
-
-      if (composeBlock && block.type === 'network' && block.previousConnection) {
-        const networksInput = composeBlock.getInput('NETWORKS')?.connection;
-        if (networksInput && !networksInput.targetConnection) {
-          networksInput.connect(block.previousConnection);
-        }
-      }
-
-      block.select();
-      (workspace as Blockly.WorkspaceSvg).centerOnBlock?.(block.id);
+      const coordinate = getDropWorkspaceCoordinate(position);
+      block.moveBy?.(coordinate.x, coordinate.y);
+      block.select?.();
       handleWorkspaceChange();
     } catch {
       // Headless tests may not provide rendered block methods.
@@ -218,8 +234,12 @@ export function bootstrapBlocklyApp({
         codeOutput.textContent = code;
       }
       if (lineNumbers) {
-        const lineCount = Math.max(1, code.split('\n').length - (code.endsWith('\n') ? 1 : 0));
-        lineNumbers.textContent = Array.from({ length: lineCount }, (_, index) => String(index + 1)).join('\n');
+        if (!code.trim()) {
+          lineNumbers.textContent = '';
+        } else {
+          const lineCount = Math.max(1, code.split('\n').length - (code.endsWith('\n') ? 1 : 0));
+          lineNumbers.textContent = Array.from({ length: lineCount }, (_, index) => String(index + 1)).join('\n');
+        }
       }
       return code;
     } catch (error) {
@@ -260,22 +280,12 @@ export function bootstrapBlocklyApp({
 
   function clearWorkspace() {
     workspace.clear();
-    createInitialComposeRoot();
+    validationUi.refresh([]);
+    if (codeOutput) codeOutput.textContent = '';
+    if (lineNumbers) lineNumbers.textContent = '';
+    if (exampleSelect) exampleSelect.value = DOCKER_COMPOSE_EXAMPLES[0].id;
     handleWorkspaceChange();
     showActionStatus('');
-  }
-
-  function createInitialComposeRoot() {
-    if (workspace.getAllBlocks(false).length > 0) return;
-
-    try {
-      const block = workspace.newBlock('compose');
-      block.initSvg?.();
-      block.render?.();
-      block.moveBy(360, 96);
-    } catch {
-      // Headless tests may not provide rendered block methods.
-    }
   }
 
   function loadExample() {
@@ -300,10 +310,13 @@ export function bootstrapBlocklyApp({
     try {
       await navigator.clipboard.writeText(generator.workspaceToCode(workspace));
       if (copyYamlButton) {
-        const previousText = copyYamlButton.textContent || 'Copy';
-        copyYamlButton.textContent = '✓ Copied';
+        const previousTitle = copyYamlButton.getAttribute('title') || 'Copy YAML';
+        const previousLabel = copyYamlButton.getAttribute('aria-label') || 'Copy YAML';
+        copyYamlButton.setAttribute('title', 'YAML copied');
+        copyYamlButton.setAttribute('aria-label', 'YAML copied');
         setTimeout(() => {
-          copyYamlButton.textContent = previousText;
+          copyYamlButton.setAttribute('title', previousTitle);
+          copyYamlButton.setAttribute('aria-label', previousLabel);
         }, 1400);
       }
     } catch {
@@ -338,8 +351,62 @@ export function bootstrapBlocklyApp({
   document.getElementById('clearWorkspace')?.addEventListener('click', clearWorkspace);
   document.getElementById('copyYaml')?.addEventListener('click', copyYaml);
   document.getElementById('downloadYaml')?.addEventListener('click', downloadYaml);
+
+  let dragPreview: HTMLElement | null = null;
+  let draggedPaletteItem: HTMLElement | null = null;
+
+  function removeDragPreview() {
+    dragPreview?.remove();
+    dragPreview = null;
+    document.body.classList.remove('palette-dragging');
+  }
+
+  function moveDragPreview(event: PointerEvent) {
+    if (!dragPreview) return;
+
+    dragPreview.style.left = event.clientX + 'px';
+    dragPreview.style.top = event.clientY + 'px';
+  }
+
+  function finishPaletteDrag(event: PointerEvent) {
+    const item = draggedPaletteItem;
+    draggedPaletteItem = null;
+    document.removeEventListener('pointermove', moveDragPreview);
+    document.removeEventListener('pointerup', finishPaletteDrag);
+    removeDragPreview();
+
+    if (!item || !isInsideWorkspace(event)) return;
+
+    const blockType = item.dataset.blockType;
+    if (!blockType) return;
+
+    addPaletteBlock(blockType, item.dataset.paletteFeature, {
+      clientX: event.clientX,
+      clientY: event.clientY
+    });
+  }
+
+  function startPaletteDrag(item: HTMLElement, event: PointerEvent) {
+    if (event.button !== 0) return;
+
+    event.preventDefault();
+    draggedPaletteItem = item;
+    dragPreview = item.cloneNode(true) as HTMLElement;
+    dragPreview.classList.add('palette-drag-preview');
+    dragPreview.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(dragPreview);
+    document.body.classList.add('palette-dragging');
+    moveDragPreview(event);
+    document.addEventListener('pointermove', moveDragPreview);
+    document.addEventListener('pointerup', finishPaletteDrag);
+  }
+
   document.querySelectorAll<HTMLElement>('[data-block-type]').forEach((item) => {
-    item.addEventListener('click', () => {
+    item.addEventListener('pointerdown', (event) => startPaletteDrag(item, event));
+    item.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+
+      event.preventDefault();
       const blockType = item.dataset.blockType;
       if (!blockType) return;
 
@@ -350,7 +417,6 @@ export function bootstrapBlocklyApp({
     window.addEventListener('resize', resizeWorkspace);
   }
 
-  createInitialComposeRoot();
   handleWorkspaceChange();
 
   return {
