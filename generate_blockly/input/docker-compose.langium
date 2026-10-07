@@ -8,22 +8,16 @@ terminal STRING: /"[^\"]*"|'[^']*'/;
 
 entry Compose:
     'compose' '{'
-        (services+=Service)+
-        (networks+=Network)*
+        (elements+=(Service | Network))+
     '}';
 
 Service:
     'service' name=ID '{'
-        ('image' image=ID)?
-        (build=Build)?
-        (restart=Restart)?
-        (healthcheck=Healthcheck)?
-        (dependencies+=Dependency)*
-        (networks+=NetworkRef)*
-        (ports+=Port)*
-        (environments+=Environment)*
-        (volumes+=Volume)*
+        (configuration+=(Image | Build | Restart | Healthcheck | Dependency | NetworkRef | Port | Environment | Volume))*
     '}';
+
+Image:
+    'image' image=ID;
 
 Dependency:
     'depends_on' target=ID;

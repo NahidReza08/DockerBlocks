@@ -73,6 +73,41 @@ function getOwningServiceBlock(block: Blockly.Block): Blockly.Block | null {
   return null;
 }
 
+function statementBlocks(block: Blockly.Block, inputName: string): Blockly.Block[] {
+  const blocks: Blockly.Block[] = [];
+  let current = block.getInputTargetBlock(inputName);
+
+  while (current) {
+    blocks.push(current);
+    current = current.getNextBlock();
+  }
+
+  return blocks;
+}
+
+function firstNonEmptyField(blocks: Blockly.Block[], fieldName: string): string {
+  return blocks
+    .map((block) => trimFieldValue(block.getFieldValue(fieldName)))
+    .find((value) => value.length > 0) ?? '';
+}
+
+function validateSingletonConfig(
+  serviceBlock: Blockly.Block,
+  blocks: Blockly.Block[],
+  label: string,
+  errors: UiValidationError[]
+) {
+  if (blocks.length <= 1) return;
+
+  const serviceName = String(serviceBlock.getFieldValue('NAME') ?? '');
+  blocks.forEach((block) => {
+    errors.push(requiredError(
+      `Service "${serviceName}" has multiple ${label} blocks. Only one ${label} block is allowed.`,
+      block.id
+    ));
+  });
+}
+
 export function collectDockerValidationErrors(
   workspace: Blockly.Workspace
 ): UiValidationError[] {
@@ -84,11 +119,13 @@ export function collectDockerValidationErrors(
     if (block.type === 'service') {
       const rawName = String(block.getFieldValue('NAME') ?? '');
       const name = trimFieldValue(rawName);
-      const image = trimFieldValue(block.getFieldValue('IMAGE'));
-      const buildBlock = block.getInputTargetBlock('BUILD');
-      const buildContext = buildBlock
-        ? trimFieldValue(buildBlock.getFieldValue('CONTEXT'))
-        : '';
+      const configBlocks = statementBlocks(block, 'CONFIG');
+      const imageBlocks = configBlocks.filter((child) => child.type === 'image');
+      const buildBlocks = configBlocks.filter((child) => child.type === 'build');
+      const restartBlocks = configBlocks.filter((child) => child.type === 'restart');
+      const healthcheckBlocks = configBlocks.filter((child) => child.type === 'healthcheck');
+      const image = firstNonEmptyField(imageBlocks, 'IMAGE');
+      const buildContext = firstNonEmptyField(buildBlocks, 'CONTEXT');
 
       if (name.length === 0) {
         errors.push(requiredError('Service name is required.', block.id));
@@ -101,6 +138,11 @@ export function collectDockerValidationErrors(
       if (image.length === 0 && buildContext.length === 0) {
         errors.push(requiredError('Service requires an image or build configuration.', block.id));
       }
+
+      validateSingletonConfig(block, imageBlocks, 'Image', errors);
+      validateSingletonConfig(block, buildBlocks, 'Build', errors);
+      validateSingletonConfig(block, restartBlocks, 'Restart', errors);
+      validateSingletonConfig(block, healthcheckBlocks, 'Healthcheck', errors);
     }
 
     if (block.type === 'build') {

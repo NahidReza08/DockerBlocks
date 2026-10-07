@@ -7,6 +7,7 @@ import {
   generateDockerDependencyYaml,
   generateDockerEnvironmentYaml,
   generateDockerHealthcheckYaml,
+  generateDockerImageYaml,
   generateDockerNetworkRefYaml,
   generateDockerNetworkYaml,
   generateDockerPortYaml,
@@ -25,6 +26,10 @@ generator.forBlock['compose'] = function (block: Blockly.Block): string {
 
 generator.forBlock['service'] = function (block: Blockly.Block): string {
   return generateDockerServiceYaml(block, generator);
+};
+
+generator.forBlock['image'] = function (block: Blockly.Block): string {
+  return generateDockerImageYaml(block);
 };
 
 generator.forBlock['dependency'] = function (block: Blockly.Block): string {

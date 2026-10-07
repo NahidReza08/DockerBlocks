@@ -65,6 +65,16 @@ function findBlock(workspace, type, fieldName, fieldValue) {
       (!fieldName || String(block.getFieldValue(fieldName)) === fieldValue));
 }
 
+function serviceImage(workspace, serviceName) {
+  const service = findBlock(workspace, 'service', 'NAME', serviceName);
+  let current = service.getInputTargetBlock('CONFIG');
+  while (current) {
+    if (current.type === 'image') return current.getFieldValue('IMAGE');
+    current = current.getNextBlock();
+  }
+  return undefined;
+}
+
 function generatedYamlFor(yaml) {
   const { workspace } = loadImportedWorkspace(yaml);
   try {
@@ -91,13 +101,57 @@ services:
 `);
     assert.equal(result.importedServices, 1);
     assert.equal(result.importedNetworks, 0);
-    assert.deepEqual(blockTypes(workspace), ['compose', 'service']);
-    assert.equal(findBlock(workspace, 'service', 'NAME', 'web').getFieldValue('IMAGE'), 'nginx');
+    assert.deepEqual(blockTypes(workspace), ['compose', 'image', 'service']);
+    assert.equal(serviceImage(workspace, 'web'), 'nginx');
     assert.equal(generatedYamlFor(`
 services:
   web:
     image: nginx
 `), 'services:\n  web:\n    image: nginx\n');
+    workspace.dispose();
+  }
+
+  {
+    const realisticYaml = `version: '3.8'
+
+# Database Service
+services:
+  web:
+    image: node:20-alpine
+    container_name: web_app
+    command: npm run dev
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:15-alpine
+    restart: always
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
+    driver: local
+networks:
+  app-network:
+    driver: bridge
+`;
+    const { result, workspace } = loadImportedWorkspace(realisticYaml);
+    assert.ok(result.report, 'Import includes an inspector report');
+    const reportByLine = new Map(result.report.lines.map(line => [line.line, line]));
+    assert.equal(reportByLine.get(1).status, 'ignored');
+    assert.match(reportByLine.get(1).reason, /metadata/i);
+    assert.equal(reportByLine.get(3).status, 'ignored');
+    assert.match(reportByLine.get(3).reason, /comment/i);
+    assert.equal(reportByLine.get(7).status, 'unsupported');
+    assert.equal(reportByLine.get(8).status, 'unsupported');
+    assert.equal(reportByLine.get(12).status, 'partial');
+    assert.equal(reportByLine.get(20).status, 'unsupported');
+    assert.equal(findBlock(workspace, 'dependency').getFieldValue('TARGET'), 'db');
+    assert.equal(findBlock(workspace, 'volume', 'SOURCE', '.').getFieldValue('TARGET'), '/usr/src/app');
+    assert.equal(findBlock(workspace, 'volume', 'SOURCE', 'pgdata').getFieldValue('TARGET'), '/var/lib/postgresql/data');
     workspace.dispose();
   }
 
@@ -210,7 +264,7 @@ services:
     build: .
 `);
     assert.equal(findBlock(workspace, 'build').getFieldValue('CONTEXT'), '.');
-    assert.equal(findBlock(workspace, 'service').getFieldValue('IMAGE'), '');
+    assert.equal(serviceImage(workspace, 'web'), undefined);
     workspace.dispose();
   }
 
@@ -339,7 +393,7 @@ services:
     command: nginx -g "daemon off;"
 `);
     assert.deepEqual(unsupportedPaths(result), ['services.web.command']);
-    assert.equal(findBlock(workspace, 'service').getFieldValue('IMAGE'), 'nginx');
+    assert.equal(serviceImage(workspace, 'web'), 'nginx');
     workspace.dispose();
   }
 
@@ -373,7 +427,7 @@ services:
       'services.web.profiles',
       'services.web.ports[0]'
     ]);
-    assert.equal(findBlock(workspace, 'service').getFieldValue('IMAGE'), 'nginx');
+    assert.equal(serviceImage(workspace, 'web'), 'nginx');
     assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'port').length, 0);
     workspace.dispose();
   }

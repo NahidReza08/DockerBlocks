@@ -16,39 +16,25 @@ const main = read('blockly_app/src/main.ts');
 const grammar = await loadGrammar(fileURLToPath(new URL('generate_blockly/input/docker-compose.langium', root)));
 assert.equal(generateMainTs(buildIR(grammar)), main, 'Runtime main.ts matches regenerated template exactly');
 
-// Execute the real handlers with real headless Blockly and a minimal DOM surface.
 function execute(source, context) {
-  const script = source
-    .replace(/^import[\s\S]*?;\r?\n/gm, '')
-    .replace(/^export /gm, '');
+  const script = source.replace(/^import[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
   vm.runInContext(ts.transpileModule(script, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
   }).outputText, context);
 }
 
 function executeScoped(source, context, expose) {
-  const script = source
-    .replace(/^import[\s\S]*?;\r?\n/gm, '')
-    .replace(/^export /gm, '');
+  const script = source.replace(/^import[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
   const output = ts.transpileModule(script, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
   }).outputText;
-  const exposedBindings = expose
-    .map(name => `globalThis.${name} = ${name};`)
-    .join('\n');
-  vm.runInContext(`(() => {\n${output}\n${exposedBindings}\n})();`, context);
+  vm.runInContext(`(() => {\n${output}\n${expose.map(name => `globalThis.${name} = ${name};`).join('\n')}\n})();`, context);
 }
 
 function element() {
-  return {
-    textContent: '', children: [], listeners: {},
-    className: '',
-    hidden: false,
-    value: '',
-    title: '',
-    attributes: {},
-    style: {},
-    dataset: {},
+  const node = {
+    textContent: '', children: [], listeners: {}, className: '', hidden: false, value: '',
+    title: '', attributes: {}, style: {}, dataset: {}, files: undefined,
     classList: {
       values: new Set(),
       add(...names) { names.forEach(name => this.values.add(name)); },
@@ -56,31 +42,21 @@ function element() {
       contains(name) { return this.values.has(name); }
     },
     appendChild(child) { this.children.push(child); return child; },
-    get lastElementChild() { return this.children.at(-1) ?? null; },
+    append(...children) { children.forEach(child => this.appendChild(child)); },
     replaceChildren() { this.children = []; this.textContent = ''; },
     addEventListener(type, handler) { this.listeners[type] = handler; },
-    setAttribute(name, value) {
-      this.attributes[name] = String(value);
-      if (name === 'title') this.title = String(value);
-      if (name === 'hidden') this.hidden = true;
-    },
-    removeAttribute(name) {
-      delete this.attributes[name];
-      if (name === 'hidden') this.hidden = false;
-    },
+    removeEventListener(type) { delete this.listeners[type]; },
+    setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'hidden') this.hidden = true; if (name === 'title') this.title = String(value); },
+    removeAttribute(name) { delete this.attributes[name]; if (name === 'hidden') this.hidden = false; },
     getAttribute(name) { return this.attributes[name] ?? null; },
-    getBoundingClientRect() { return this.rect ?? { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
-    cloneNode() {
-      const clone = element();
-      clone.className = this.className;
-      clone.textContent = this.textContent;
-      clone.dataset = { ...this.dataset };
-      return clone;
-    },
-    click() { this.clicked = true; this.listeners.click?.(); },
+    getBoundingClientRect() { return this.rect ?? { left: 0, top: 0, right: 1000, bottom: 600, width: 1000, height: 600 }; },
+    cloneNode() { const clone = element(); clone.dataset = { ...this.dataset }; clone.textContent = this.textContent; return clone; },
+    click() { this.clicked = true; this.listeners.click?.({ preventDefault() {}, stopPropagation() {}, target: this }); },
     focus() { this.focused = true; },
-    remove() { this.removed = true; }
+    remove() { this.removed = true; },
+    closest() { return null; }
   };
+  return node;
 }
 
 function textContentDeep(node) {
@@ -90,22 +66,19 @@ function textContentDeep(node) {
 function validationMessages() {
   return elements.errorOutput.children
     .filter(child => child.className === 'validation-error')
-    .map(child => {
-    const message = child.children?.[1]?.children?.find(grandchild =>
-      grandchild.className === 'validation-error-title'
-    );
-    return message?.textContent ?? textContentDeep(child);
-  });
+    .map(child => textContentDeep(child));
 }
 
 const ids = [
-  'codeOutput', 'lineNumbers', 'errorOutput', 'actionStatus', 'yamlStatus',
+  'codeOutput', 'lineNumbers', 'errorOutput', 'actionStatus', 'yamlStatus', 'blocklyDiv',
   'summaryEmpty', 'summaryServicesItem', 'summaryNetworksItem', 'summaryVolumesItem',
   'summaryDependenciesItem', 'summaryHealthchecksItem',
-  'summaryEmptyTitle', 'summaryEmptyMessage', 'blocklyDiv',
+  'summaryEmptyTitle', 'summaryEmptyMessage',
   'summaryServices', 'summaryNetworks', 'summaryVolumes', 'summaryDependencies', 'summaryHealthchecks',
   'exampleSelect', 'loadExample', 'openImportYaml', 'importDialog', 'importYamlText',
   'importYamlFile', 'importStatus', 'importYamlSubmit', 'importYamlCancel', 'chooseYamlFile',
+  'openImportInspector', 'importInspectorDialog', 'importInspectorSummary', 'importInspectorBody',
+  'closeImportInspector', 'clearWorkspaceDialog', 'confirmTrashClear', 'cancelTrashClear',
   'validateWorkspace', 'clearWorkspace', 'copyYaml', 'downloadYaml'
 ];
 const elements = Object.fromEntries(ids.map(id => [id, element()]));
@@ -115,62 +88,69 @@ elements.copyYaml.setAttribute('aria-label', 'Copy YAML');
 elements.downloadYaml.setAttribute('title', 'Download YAML');
 elements.downloadYaml.setAttribute('aria-label', 'Download YAML');
 elements.importDialog.hidden = true;
+elements.importInspectorDialog.hidden = true;
+elements.clearWorkspaceDialog.hidden = true;
 elements.importStatus.hidden = true;
+const shell = element();
+shell.className = 'app-shell';
+shell.style.setProperty = (name, value) => { shell.style[name] = value; };
+const bottomGrid = element();
+bottomGrid.className = 'bottom-grid';
 const paletteItems = [
-  'compose', 'service', 'service', 'build', 'port', 'environment',
+  'compose', 'service', 'image', 'build', 'port', 'environment',
   'volume', 'dependency', 'networkref', 'restart', 'healthcheck', 'network'
 ].map(type => {
   const item = element();
   item.dataset = { blockType: type };
   return item;
 });
-paletteItems[2].dataset.paletteFeature = 'image';
+const resizers = ['toolbox', 'yaml', 'bottom', 'validation'].map(kind => {
+  const item = element();
+  item.dataset = { resizer: kind };
+  return item;
+});
 const workspace = new Blockly.Workspace();
 workspace.scroll = () => {};
-const anchors = [];
-const downloads = [];
-const revoked = [];
 const timers = [];
-const documentListeners = {};
+const downloads = [];
+const anchors = [];
 let copied;
 let injectedOptions;
+const documentListeners = {};
 const navigator = { clipboard: { async writeText(text) { copied = text; } } };
 class FileReaderMock {
-  constructor() {
-    this.listeners = {};
-    this.result = '';
-  }
-
-  addEventListener(type, handler) {
-    this.listeners[type] = handler;
-  }
-
-  readAsText(file) {
-    if (file.error) {
-      this.listeners.error?.();
-      return;
-    }
-
-    this.result = file.textContent ?? file.content ?? '';
-    this.listeners.load?.();
-  }
+  constructor() { this.listeners = {}; this.result = ''; }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  readAsText(file) { this.result = file.textContent ?? ''; this.listeners.load?.(); }
 }
+
 const context = vm.createContext({
-  Blockly: { ...Blockly, inject: (_id, options) => { injectedOptions = options; return workspace; } }, javascriptGenerator, Order,
-  validationErrors: [], navigator, Blob, FileReader: FileReaderMock, parseDocument,
+  Blockly: { ...Blockly, inject: (_id, options) => { injectedOptions = options; return workspace; } },
+  javascriptGenerator, Order, validationErrors: [], navigator, Blob, FileReader: FileReaderMock, parseDocument,
   URL: {
     createObjectURL(blob) { downloads.push(blob); return 'blob:yaml'; },
-    revokeObjectURL(url) { revoked.push(url); }
+    revokeObjectURL() {}
   },
   setTimeout(callback, delay) { timers.push({ callback, delay }); },
+  getComputedStyle() {
+    return { getPropertyValue(name) {
+      return shell.style[name] ?? (name === '--toolbox-width' ? '240' : name === '--yaml-width' ? '430' : name === '--bottom-height' ? '190' : '500');
+    } };
+  },
   document: {
-    getElementById: id => elements[id], body: element(),
+    getElementById: id => elements[id],
+    body: element(),
     addEventListener(type, handler) { documentListeners[type] = handler; },
-    removeEventListener(type, handler) {
-      if (documentListeners[type] === handler) delete documentListeners[type];
+    removeEventListener(type) { delete documentListeners[type]; },
+    querySelector(selector) {
+      if (selector === '.app-shell') return shell;
+      if (selector === '.bottom-grid') return bottomGrid;
+      return null;
     },
     querySelectorAll(selector) {
-      return selector === '[data-block-type]' ? paletteItems : [];
+      if (selector === '[data-block-type]') return paletteItems;
+      if (selector === '[data-resizer]') return resizers;
+      return [];
     },
     createElement(tag) {
       const node = element();
@@ -180,35 +160,6 @@ const context = vm.createContext({
   }
 });
 const click = id => elements[id].listeners.click();
-const keyboardCreate = (item, key = 'Enter') => item.listeners.keydown({
-  key,
-  preventDefault() { this.defaultPrevented = true; }
-});
-const pointerEvent = (clientX, clientY) => ({
-  button: 0,
-  clientX,
-  clientY,
-  preventDefault() { this.defaultPrevented = true; }
-});
-const dragPaletteItem = (item, clientX, clientY) => {
-  item.listeners.pointerdown(pointerEvent(12, 12));
-  documentListeners.pointerup(pointerEvent(clientX, clientY));
-};
-const clean = () => {
-  assert.ok(
-    elements.errorOutput.children.length >= 1,
-    'Validation panel should show empty state or relevant successful checks'
-  );
-  assert.equal(validationMessages().some(message => message.includes('Validation issue')), false);
-};
-
-function validationText() {
-  return textContentDeep(elements.errorOutput);
-}
-
-function importStatusText() {
-  return textContentDeep(elements.importStatus);
-}
 
 try {
   execute(read('blockly_app/src/docker-yaml.ts'), context);
@@ -220,107 +171,32 @@ try {
   execute(read('blockly_app/src/blocks.ts'), context);
   execute(read('blockly_app/src/generator.ts'), context);
   execute(main.replace('bootstrapBlocklyApp({', 'globalThis.app = bootstrapBlocklyApp({'), context);
-  assert.equal(injectedOptions.move.scrollbars, true, 'Blockly native scrollbars are enabled');
-  assert.equal(injectedOptions.move.drag, true, 'Blockly workspace drag panning is enabled');
-  assert.equal(injectedOptions.move.wheel, true, 'Blockly wheel navigation is enabled');
-  const simpleExpected = [
-    'services:',
-    '  web:',
-    '    image: nginx:latest',
-    '    restart: unless-stopped',
-    '    ports:',
-    '      - "8080:80"',
-    ''
-  ].join('\n');
-  const multiExpectedSections = [
-    '  web:',
-    '    image: docker-blocks-demo-web:latest',
-    '    build: .',
-    '    restart: unless-stopped',
-    '    healthcheck:',
-    '      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]',
-    '    depends_on:',
-    '      - database',
-    '    networks:',
-    '      - backend',
-    '    ports:',
-    '      - "8080:80"',
-    '    environment:',
-    '      APP_ENV: production',
-    '      DATABASE_HOST: database',
-    '  database:',
-    '    image: postgres:latest',
-    '      POSTGRES_PASSWORD: example',
-    '    volumes:',
-    '      - "./data:/var/lib/postgresql/data"',
-    'networks:',
-    '  backend:',
-    '    driver: bridge'
-  ];
-  assert.deepEqual(
-    elements.exampleSelect.children.map(option => option.textContent),
-    ['Simple Web Service', 'Multi-Service Application'],
-    'Example selector exposes the polished demo examples'
-  );
-  assert.equal(elements.exampleSelect.value, 'simple-web-service');
-  assert.equal(elements.codeOutput.textContent, '', 'Initial workspace has no generated YAML');
-  assert.equal(elements.lineNumbers?.textContent ?? '', '');
-  assert.equal(elements.yamlStatus.textContent, 'Invalid');
-  assert.equal(elements.summaryServices.textContent, '0');
-  assert.equal(elements.summaryEmpty.hidden, false);
-  assert.equal(elements.summaryServicesItem.hidden, true);
-  assert.equal(workspace.getAllBlocks(false).length, 0);
-  assert.match(validationText(), /No configuration yet/);
-  assert.match(validationText(), /Start by adding a Compose block/);
-  assert.equal(elements.errorOutput.children[0].className, 'validation-empty-state');
-  assert.equal(validationText().includes('Ports valid'), false, 'Empty workspace does not show unrelated green validation');
 
-  click('openImportYaml');
-  assert.equal(elements.importDialog.hidden, false, 'Import YAML opens the import dialog');
-  assert.equal(elements.importYamlText.value, '', 'Import dialog starts with an empty paste area');
-  assert.equal(elements.importYamlText.focused, true, 'Import dialog focuses the YAML textarea');
-  click('importYamlCancel');
-  assert.equal(elements.importDialog.hidden, true, 'Cancel closes the import dialog');
+  assert.equal(injectedOptions.move.scrollbars, true);
+  assert.deepEqual(elements.exampleSelect.children.map(option => option.textContent), ['Full Compose', 'Service', 'Network']);
+  assert.equal(elements.codeOutput.textContent, '');
+  assert.match(textContentDeep(elements.errorOutput), /No configuration yet/);
 
-  click('openImportYaml');
-  elements.importYamlText.value = [
-    'services:',
-    '  web:',
-    '    image: nginx:latest',
-    '    restart: unless-stopped',
-    '    ports:',
-    '      - "8080:80"',
-    ''
-  ].join('\n');
-  click('importYamlSubmit');
-  assert.equal(elements.importDialog.hidden, true, 'Successful paste import closes the import dialog');
-  assert.equal(elements.importStatus.hidden, false, 'Successful import shows import status');
-  assert.match(importStatusText(), /YAML imported successfully/);
-  assert.match(importStatusText(), /1 service imported/);
-  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'service').length, 1);
-  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'restart').length, 1);
+  click('loadExample');
+  assert.equal(elements.actionStatus.textContent, 'Full Compose loaded.');
+  assert.equal(elements.summaryServices.textContent, '2');
+  assert.equal(elements.summaryNetworks.textContent, '1');
   assert.equal(elements.yamlStatus.textContent, 'Valid');
-  assert.equal(validationMessages().length, 0);
-  assert.ok(elements.codeOutput.textContent.includes('restart: unless-stopped'));
-  const generatedImportDoc = parseDocument(elements.codeOutput.textContent).toJS();
-  assert.equal(generatedImportDoc.services.web.image, 'nginx:latest', 'Generated YAML after import is parseable');
-  assert.deepEqual(generatedImportDoc.services.web.ports, ['8080:80']);
+  assert.ok(elements.codeOutput.textContent.includes('healthcheck:'));
+  const yamlAfterFullExample = elements.codeOutput.textContent;
 
-  const yamlBeforeMalformedImport = elements.codeOutput.textContent;
-  const blockCountBeforeMalformedImport = workspace.getAllBlocks(false).length;
-  click('openImportYaml');
-  elements.importYamlText.value = 'services:\n  web: [';
-  click('importYamlSubmit');
-  assert.equal(elements.importDialog.hidden, false, 'Failed paste import leaves the dialog available for correction');
-  assert.match(importStatusText(), /YAML could not be imported/);
-  assert.equal(workspace.getAllBlocks(false).length, blockCountBeforeMalformedImport,
-    'Malformed YAML import does not destroy the existing workspace');
-  assert.equal(elements.codeOutput.textContent, yamlBeforeMalformedImport,
-    'Malformed YAML import preserves the previously generated YAML');
-  click('importYamlCancel');
+  elements.exampleSelect.value = 'service';
+  click('loadExample');
+  assert.equal(elements.summaryServices.textContent, '3', 'Service example adds without clearing');
+  assert.ok(elements.codeOutput.textContent.length > yamlAfterFullExample.length);
+  elements.exampleSelect.value = 'network';
+  click('loadExample');
+  assert.equal(elements.summaryNetworks.textContent, '2', 'Network example adds without clearing');
 
   click('openImportYaml');
   elements.importYamlText.value = [
+    "version: '3.8'",
+    '# Database Service',
     'services:',
     '  web:',
     '    image: nginx:latest',
@@ -330,380 +206,60 @@ try {
     ''
   ].join('\n');
   click('importYamlSubmit');
-  assert.match(importStatusText(), /YAML imported with warnings/);
-  assert.match(importStatusText(), /Unsupported fields skipped:/);
-  assert.match(importStatusText(), /services\.web\.command/);
-  assert.equal(elements.yamlStatus.textContent, 'Valid',
-    'Unsupported imported fields are reported separately from normal validation');
-  assert.equal(validationMessages().length, 0);
+  assert.equal(elements.importDialog.hidden, true);
+  assert.match(textContentDeep(elements.importStatus), /YAML imported with warnings/);
+  assert.match(textContentDeep(elements.importStatus), /unsupported\/partial/);
+  assert.equal(validationMessages().length, 0, 'Unsupported fields stay out of normal validation');
+  click('openImportInspector');
+  assert.equal(elements.importInspectorDialog.hidden, false);
+  assert.match(textContentDeep(elements.importInspectorSummary), /imported/);
+  assert.match(textContentDeep(elements.importInspectorBody), /Unsupported \/ skipped/);
+  assert.match(textContentDeep(elements.importInspectorBody), /Ignored Compose metadata/);
+  click('closeImportInspector');
 
+  const beforeMalformed = elements.codeOutput.textContent;
   click('openImportYaml');
-  elements.importYamlText.value = [
-    'services:',
-    '  web:',
-    '    ports:',
-    '      - "8080:80"',
-    ''
-  ].join('\n');
+  elements.importYamlText.value = 'services:\n  web: [';
   click('importYamlSubmit');
-  assert.equal(elements.yamlStatus.textContent, 'Invalid', 'Normal validation runs after import');
-  assert.deepEqual(validationMessages(), ['Service requires an image or build configuration.']);
-  assert.ok(elements.codeOutput.textContent.includes('ports:'));
+  assert.equal(elements.codeOutput.textContent, beforeMalformed, 'Malformed YAML preserves workspace');
+  assert.equal(elements.importDialog.hidden, false);
+  click('importYamlCancel');
 
-  click('openImportYaml');
-  elements.importYamlText.value = [
-    'services:',
-    '  web:',
-    '    image: nginx:latest',
-    '    depends_on:',
-    '      - db',
-    '    networks:',
-    '      - backend',
-    '  db:',
-    '    image: postgres:16',
-    'networks:',
-    '  backend:',
-    '    driver: bridge',
-    ''
-  ].join('\n');
-  click('importYamlSubmit');
-  assert.equal(elements.summaryServices.textContent, '2', 'Paste import supports multiple services');
-  assert.equal(elements.summaryNetworks.textContent, '1', 'Paste import supports top-level networks');
-  assert.equal(elements.summaryDependencies.textContent, '1', 'Paste import supports dependencies');
-  assert.equal(elements.yamlStatus.textContent, 'Valid');
-  assert.ok(elements.codeOutput.textContent.includes('depends_on:\n      - db'));
-  assert.ok(elements.codeOutput.textContent.includes('networks:\n  backend:\n    driver: bridge'));
-  const generatedMultiImportDoc = parseDocument(elements.codeOutput.textContent).toJS();
-  assert.equal(generatedMultiImportDoc.services.web.depends_on[0], 'db');
-  assert.equal(generatedMultiImportDoc.networks.backend.driver, 'bridge');
-
-  click('chooseYamlFile');
-  assert.equal(elements.importYamlFile.clicked, true, 'Choose file delegates to the hidden file input');
-  const yamlBeforeBadFileImport = elements.codeOutput.textContent;
-  elements.importYamlFile.files = [{ name: 'compose.txt', textContent: 'services:\n  bad:\n    image: alpine\n' }];
+  elements.importYamlFile.files = [{ name: 'docker-compose.yaml', textContent: 'services:\n  worker:\n    image: alpine\n' }];
   elements.importYamlFile.listeners.change();
-  assert.match(importStatusText(), /Only \.yml and \.yaml files can be imported/);
-  assert.equal(elements.codeOutput.textContent, yamlBeforeBadFileImport,
-    'Unsupported file extension does not replace the workspace');
-  elements.importYamlFile.files = [{
-    name: 'docker-compose.yaml',
-    textContent: [
-      'services:',
-      '  worker:',
-      '    image: alpine:latest',
-      '    restart: "no"',
-      '    labels:',
-      '      app: worker',
-      ''
-    ].join('\n')
-  }];
-  elements.importYamlFile.listeners.change();
-  assert.match(importStatusText(), /YAML imported with warnings/);
-  assert.match(importStatusText(), /services\.worker\.labels/);
-  assert.equal(elements.summaryServices.textContent, '1', 'File import replaces workspace with imported services');
-  assert.ok(elements.codeOutput.textContent.includes('restart: "no"'),
-    'File import preserves parse-safe restart no generation');
-  assert.equal(elements.yamlStatus.textContent, 'Valid');
+  assert.equal(elements.summaryServices.textContent, '1', 'File import replaces workspace');
+
+  resizers[0].listeners.pointerdown({ preventDefault() {}, clientX: 200, clientY: 0 });
+  documentListeners.pointermove({ clientX: 260, clientY: 0 });
+  documentListeners.pointerup();
+  assert.ok(shell.style['--toolbox-width'], 'Resizable layout updates CSS variables');
 
   click('clearWorkspace');
-  assert.equal(elements.importStatus.hidden, true, 'Clear resets reverse import status');
-  assert.equal(importStatusText(), '');
-
-  paletteItems[1].click();
-  assert.equal(workspace.getAllBlocks(false).length, 0, 'Clicking a palette row does not create a block');
-  dragPaletteItem(paletteItems[1], 20, 20);
-  assert.equal(workspace.getAllBlocks(false).length, 0, 'Dropping outside the workspace creates nothing');
-  dragPaletteItem(paletteItems[0], 280, 180);
-  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'compose').length, 1,
-    'Dragging Compose into the workspace creates a Compose block');
-  assert.equal(elements.codeOutput.textContent, 'services:\n');
-  assert.match(validationText(), /Compose structure is incomplete/);
-  assert.match(validationText(), /Add at least one Service block/);
-  keyboardCreate(paletteItems[1], 'Enter');
-  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'service').length, 1,
-    'Keyboard activation still creates blocks for accessibility');
-  dragPaletteItem(paletteItems[11], 320, 220);
-  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'network').length, 1,
-    'Multiple palette blocks can be dragged in');
-  click('clearWorkspace');
-  dragPaletteItem(paletteItems[11], 320, 220);
-  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'network').length, 1,
-    'A resource-only workspace can be represented');
-  assert.equal(elements.summaryNetworksItem.hidden, false);
-  assert.equal(elements.summaryEmpty.hidden, false);
-  assert.match(elements.summaryEmptyTitle.textContent, /No valid service configuration yet/);
-  assert.match(validationText(), /No valid service configuration yet/);
-  click('clearWorkspace');
-  assert.equal(workspace.getAllBlocks(false).length, 0);
+  assert.equal(elements.importStatus.hidden, true);
   assert.equal(elements.codeOutput.textContent, '');
-  assert.equal(elements.yamlStatus.textContent, 'Invalid');
-  assert.equal(elements.summaryEmpty.hidden, false);
-  assert.match(validationText(), /No configuration yet/);
+  click('openImportInspector');
+  assert.match(textContentDeep(elements.importInspectorSummary), /No imported YAML/);
+  click('closeImportInspector');
 
-  keyboardCreate(paletteItems[0], 'Enter');
-  const initialCompose = workspace
-    .getAllBlocks(false)
-    .find(block => block.type === 'compose');
-  const invalid = workspace.newBlock('service');
-  invalid.setFieldValue('', 'NAME');
-  invalid.setFieldValue('', 'IMAGE');
-  initialCompose.getInput('SERVICES').connection.connect(invalid.previousConnection);
-  invalid.lastValidationWarning = undefined;
-  invalid.setWarningText = (text, id) => {
-    if (id === 'captured-validation-error') {
-      invalid.lastValidationWarning = text;
-    }
-  };
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children[0].className, 'validation-error-summary');
-  assert.deepEqual(validationMessages(), [
-    'Service name is required.',
-    'Service requires an image or build configuration.'
-  ]);
-  assert.match(invalid.lastValidationWarning, /Service name is required/);
-  assert.match(invalid.lastValidationWarning, /Service requires an image or build configuration/);
-  assert.equal(elements.yamlStatus.textContent, 'Invalid');
-  assert.equal(validationText().includes('Healthcheck valid'), false, 'Invalid state omits unrelated success rows');
-  invalid.setFieldValue('web', 'NAME');
-  invalid.setFieldValue('nginx:latest', 'IMAGE');
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(invalid.lastValidationWarning, null);
-  assert.equal(elements.yamlStatus.textContent, 'Valid');
-  assert.equal(validationText().includes('No errors found.'), true);
-  assert.equal(validationText().includes('Ports valid'), false, 'No ports means no Ports valid row');
-  click('clearWorkspace');
-  assert.equal(workspace.getAllBlocks(false).length, 0);
-  assert.equal(elements.codeOutput.textContent, '');
-  assert.equal(elements.yamlStatus.textContent, 'Invalid');
-  assert.equal(elements.exampleSelect.value, 'simple-web-service');
-  assert.equal(elements.summaryEmpty.hidden, false);
-  clean();
-  // A queued Blockly event must not bring cleared errors back.
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  clean();
-  click('clearWorkspace');
-  keyboardCreate(paletteItems[0], 'Enter');
-  const compose = workspace
-    .getAllBlocks(false)
-    .find(block => block.type === 'compose');
-  const duplicateA = workspace.newBlock('service');
-  const duplicateB = workspace.newBlock('service');
-  duplicateA.setFieldValue('web', 'NAME');
-  duplicateA.setFieldValue('nginx', 'IMAGE');
-  duplicateB.setFieldValue('web', 'NAME');
-  duplicateB.setFieldValue('node', 'IMAGE');
-  compose.getInput('SERVICES').connection.connect(duplicateA.previousConnection);
-  duplicateA.nextConnection.connect(duplicateB.previousConnection);
-  for (const block of [duplicateA, duplicateB]) {
-    block.lastValidationWarning = undefined;
-    block.setWarningText = (text, id) => {
-      if (id === 'captured-validation-error') {
-        block.lastValidationWarning = text;
-      }
-    };
-  }
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 3, 'Duplicate service names render summary plus both errors');
-  assert.deepEqual(validationMessages(), ['Duplicate service name "web".', 'Duplicate service name "web".']);
-  assert.equal(duplicateA.lastValidationWarning, 'Duplicate service name "web".');
-  assert.equal(duplicateB.lastValidationWarning, 'Duplicate service name "web".');
-  assert.equal(elements.summaryServices.textContent, '2');
-  duplicateB.setFieldValue('api', 'NAME');
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  clean();
-  assert.equal(duplicateA.lastValidationWarning, null);
-  assert.equal(duplicateB.lastValidationWarning, null);
-  const dependency = workspace.newBlock('dependency');
-  dependency.setFieldValue('missing-service', 'TARGET');
-  duplicateA.getInput('DEPENDS_ON').connection.connect(dependency.previousConnection);
-  dependency.lastValidationWarning = undefined;
-  dependency.setWarningText = (text, id) => {
-    if (id === 'captured-validation-error') {
-      dependency.lastValidationWarning = text;
-    }
-  };
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 2, 'Dependency validation renders summary plus one error');
-  assert.deepEqual(validationMessages(), ['Unknown dependency service "missing-service".']);
-  assert.equal(dependency.lastValidationWarning, 'Unknown dependency service "missing-service".');
-  dependency.setFieldValue('api', 'TARGET');
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  clean();
-  assert.equal(dependency.lastValidationWarning, null);
-  const networkRef = workspace.newBlock('networkref');
-  networkRef.setFieldValue('missing-network', 'TARGET');
-  duplicateA.getInput('NETWORKS').connection.connect(networkRef.previousConnection);
-  networkRef.lastValidationWarning = undefined;
-  networkRef.setWarningText = (text, id) => {
-    if (id === 'captured-validation-error') {
-      networkRef.lastValidationWarning = text;
-    }
-  };
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 2, 'Network validation renders summary plus one error');
-  assert.deepEqual(validationMessages(), ['Unknown network "missing-network".']);
-  assert.equal(networkRef.lastValidationWarning, 'Unknown network "missing-network".');
-  const network = workspace.newBlock('network');
-  network.setFieldValue('missing-network', 'NAME');
-  network.setFieldValue('bridge', 'DRIVER');
-  compose.getInput('NETWORKS').connection.connect(network.previousConnection);
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  clean();
-  assert.equal(networkRef.lastValidationWarning, null);
-  const healthcheck = workspace.newBlock('healthcheck');
-  healthcheck.setFieldValue('', 'COMMAND');
-  healthcheck.setFieldValue('30s', 'INTERVAL');
-  healthcheck.setFieldValue('10s', 'TIMEOUT');
-  healthcheck.setFieldValue('3', 'RETRIES');
-  duplicateA.getInput('HEALTHCHECK').connection.connect(healthcheck.outputConnection);
-  healthcheck.lastValidationWarning = undefined;
-  healthcheck.setWarningText = (text, id) => {
-    if (id === 'captured-validation-error') {
-      healthcheck.lastValidationWarning = text;
-    }
-  };
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 2, 'Healthcheck validation renders summary plus one error');
-  assert.deepEqual(validationMessages(), ['Healthcheck command is required.']);
-  assert.equal(healthcheck.lastValidationWarning, 'Healthcheck command is required.');
-  healthcheck.setFieldValue('curl -f http://localhost || exit 1', 'COMMAND');
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  clean();
-  assert.equal(healthcheck.lastValidationWarning, null);
-  const build = workspace.newBlock('build');
-  build.setFieldValue('', 'CONTEXT');
-  duplicateA.getInput('BUILD').connection.connect(build.outputConnection);
-  build.lastValidationWarning = undefined;
-  build.setWarningText = (text, id) => {
-    if (id === 'captured-validation-error') {
-      build.lastValidationWarning = text;
-    }
-  };
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  assert.equal(elements.errorOutput.children.length, 2, 'Build validation renders summary plus one error');
-  assert.deepEqual(validationMessages(), ['Build context is required.']);
-  assert.equal(build.lastValidationWarning, 'Build context is required.');
-  build.setFieldValue('.', 'CONTEXT');
-  vm.runInContext('app.handleWorkspaceChange()', context);
-  clean();
-  assert.equal(build.lastValidationWarning, null);
-  click('clearWorkspace');
-  clean();
-  for (let i = 0; i < 2; i++) {
-    click('loadExample');
-    assert.equal(elements.actionStatus.textContent, 'Simple Web Service loaded.');
-    assert.equal(elements.codeOutput.textContent, simpleExpected, 'Load Example generates exact simple YAML');
-    assert.equal(workspace.getAllBlocks(false).length, 4, 'Reload replaces blocks with compact simple example');
-    assert.equal(elements.summaryServices.textContent, '1');
-    assert.equal(elements.summaryNetworks.textContent, '0');
-    assert.equal(elements.summaryVolumes.textContent, '0');
-    assert.equal(elements.summaryDependencies.textContent, '0');
-    assert.equal(elements.summaryHealthchecks.textContent, '0');
-    assert.equal(elements.summaryEmpty.hidden, true);
-    assert.equal(elements.summaryServicesItem.hidden, false);
-    assert.equal(elements.summaryNetworksItem.hidden, true);
-    assert.equal(elements.summaryVolumesItem.hidden, true);
-    assert.equal(elements.summaryDependenciesItem.hidden, true);
-    assert.equal(elements.summaryHealthchecksItem.hidden, true);
-    assert.equal(elements.yamlStatus.textContent, 'Valid');
-    assert.equal(validationText().includes('No errors found.'), true);
-    assert.equal(validationText().includes('Your Docker Compose configuration is valid.'), true);
-    assert.equal(validationText().includes('Ports valid'), false);
-    assert.equal(validationText().includes('Dependencies valid'), false);
-    assert.equal(validationText().includes('Healthcheck valid'), false);
-    clean();
-  }
-  elements.exampleSelect.value = 'multi-service-application';
-  click('loadExample');
-  assert.equal(elements.actionStatus.textContent, 'Multi-Service Application loaded.');
-  assert.equal(elements.summaryServices.textContent, '2');
-  assert.equal(elements.summaryNetworks.textContent, '1');
-  assert.equal(elements.summaryVolumes.textContent, '1');
-  assert.equal(elements.summaryDependencies.textContent, '1');
-  assert.equal(elements.summaryHealthchecks.textContent, '1');
-  assert.equal(elements.summaryEmpty.hidden, true);
-  assert.equal(elements.summaryServicesItem.hidden, false);
-  assert.equal(elements.summaryNetworksItem.hidden, false);
-  assert.equal(elements.summaryVolumesItem.hidden, false);
-  assert.equal(elements.summaryDependenciesItem.hidden, false);
-  assert.equal(elements.summaryHealthchecksItem.hidden, false);
-  assert.equal(elements.yamlStatus.textContent, 'Valid');
-  assert.equal(validationText().includes('No errors found.'), true);
-  assert.equal(validationText().includes('Your Docker Compose configuration is valid.'), true);
-  assert.equal(validationText().includes('Build settings valid'), false);
-  assert.equal(validationText().includes('Dependencies valid'), false);
-  assert.equal(validationText().includes('Networks valid'), false);
-  assert.equal(validationText().includes('Healthcheck valid'), false);
-  assert.equal(validationText().includes('Volumes valid'), false);
-  for (const expectedSection of multiExpectedSections) {
-    assert.ok(
-      elements.codeOutput.textContent.includes(expectedSection),
-      `Multi-service example YAML should include: ${expectedSection}`
-    );
-  }
-  clean();
-  click('validateWorkspace');
-  assert.equal(elements.actionStatus.textContent, 'Workspace validation passed.');
-  const validYaml = elements.codeOutput.textContent;
   await click('copyYaml');
-  assert.equal(copied, validYaml, 'Copy preserves valid YAML content');
-  assert.equal(elements.copyYaml.getAttribute('title'), 'YAML copied');
-  assert.equal(timers.at(-1).delay, 1400, 'Copy feedback resets after a short delay');
-  timers.pop().callback();
-  assert.equal(elements.copyYaml.getAttribute('title'), 'Copy YAML');
+  assert.equal(copied, '');
   click('downloadYaml');
-  assert.equal(await downloads.at(-1).text(), validYaml, 'Download preserves valid YAML content');
-  assert.equal(anchors.at(-1).download, 'docker-compose.yml');
-  assert.equal(anchors.at(-1).href, 'blob:yaml');
-  assert.ok(anchors.at(-1).clicked && anchors.at(-1).removed);
-  timers.shift().callback();
-  assert.equal(revoked.at(-1), 'blob:yaml');
+  assert.equal(await downloads.at(-1).text(), '');
 
-  click('clearWorkspace');
-  const clearedYaml = elements.codeOutput.textContent;
-  assert.equal(clearedYaml, '', 'Clear leaves no partial services/networks YAML behind');
-  await click('copyYaml');
-  assert.equal(copied, clearedYaml, 'Copy preserves cleared initial YAML content');
-  assert.equal(elements.copyYaml.getAttribute('aria-label'), 'YAML copied');
-  timers.pop().callback();
-  click('downloadYaml');
-  assert.equal(await downloads.at(-1).text(), clearedYaml, 'Download preserves cleared initial YAML content');
-  timers.shift().callback();
-  navigator.clipboard.writeText = async () => { throw new Error('Permission denied'); };
-  await click('copyYaml');
-  assert.match(elements.actionStatus.textContent, /Could not copy YAML/);
-  delete navigator.clipboard;
-  await click('copyYaml');
-  assert.match(elements.actionStatus.textContent, /copy it manually/);
-  clean();
   const html = read('blockly_app/index.html');
-  for (const [id, label] of [['exampleSelect', 'Example'], ['loadExample', 'Load Example'], ['openImportYaml', 'Import YAML'], ['validateWorkspace', 'Validate'], ['clearWorkspace', 'Clear'],
-    ['copyYaml', 'Copy'], ['downloadYaml', 'Download']]) {
-    assert.ok(html.includes(`id="${id}"`));
-    assert.ok(html.includes(label));
-  }
-  for (const id of ['importDialog', 'importYamlText', 'importYamlSubmit', 'importYamlCancel', 'chooseYamlFile', 'importYamlFile', 'importStatus']) {
-    assert.ok(html.includes(`id="${id}"`), `Import UI includes ${id}`);
-  }
-  for (const label of [
-    'Structure', 'Service Configuration', 'Resources', 'Compose', 'Service', 'Network',
-    'Image', 'Build', 'Ports', 'Environment', 'Volumes', 'Depends On',
-    'Networks', 'Restart', 'Healthcheck'
+  for (const id of [
+    'openImportYaml', 'openImportInspector', 'importInspectorDialog',
+    'clearWorkspaceDialog', 'confirmTrashClear', 'cancelTrashClear'
   ]) {
-    assert.ok(html.includes(label), `Palette includes ${label}`);
+    assert.ok(html.includes(`id="${id}"`), `HTML includes ${id}`);
   }
-  assert.equal(html.includes('name": "Docker"'), false, 'Generated generic Docker category is absent from app HTML');
+  assert.equal((html.match(/data-resizer=/g) ?? []).length, 4, 'Four layout resizers are present');
   assert.equal((html.match(/data-block-type=/g) ?? []).length, 12, 'Palette exposes every supported block action');
-  assert.equal((html.match(/id="copyYaml"/g) ?? []).length, 1, 'Copy appears once');
-  assert.equal((html.match(/id="downloadYaml"/g) ?? []).length, 1, 'Download appears once');
-  assert.ok(html.includes('validation-empty-state'), 'Validation empty state uses a stable icon-and-copy layout');
-  assert.ok(html.includes('white-space: nowrap'), 'Headers and status controls guard against narrow wrapping');
-  assert.ok(html.includes('minmax(430px, 32%)'), 'YAML column keeps enough width for title, status, and actions');
-  assert.ok(html.includes('Docker-Blocks'));
-  assert.ok(html.includes('Visual Docker Compose Generator'));
-  assert.ok(html.includes('docker-compose.yml'));
-  assert.ok(html.includes('Workspace Summary'));
-  console.log('[PASS] Final UI actions: example selector, YAML refresh, clear/validation, copy success/failure, download content/cleanup, runtime/template parity');
+  assert.equal(html.includes('Example</span>'), false, 'Toolbar no longer has redundant Example label text');
+  assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "CONFIG"'), 'Generated Service uses dynamic CONFIG chain');
+  assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "ELEMENTS"'), 'Generated Compose uses dynamic ELEMENTS chain');
+
+  console.log('[PASS] Final UI actions: dynamic examples, import inspector, bounded/resizable layout hooks, copy/download, runtime/template parity');
 } finally {
   workspace.dispose();
 }

@@ -6,56 +6,88 @@ type DockerYamlGenerator = {
   valueToCode(block: Blockly.Block, name: string, order: Order): string;
 };
 
-function listItems(
-  text: string,
-  prefix: string
-): string {
+function statementBlocks(block: Blockly.Block, inputName: string): Blockly.Block[] {
+  const blocks: Blockly.Block[] = [];
+  let current = block.getInputTargetBlock(inputName);
+
+  while (current) {
+    blocks.push(current);
+    current = current.getNextBlock();
+  }
+
+  return blocks;
+}
+
+function indentBlock(text: string, spaces: number): string {
+  const prefix = ' '.repeat(spaces);
   return text
-    ? text
-        .split('\n')
-        .filter((line) => line.trim().length > 0)
-        .map((line) => prefix + line.trim())
-        .join('\n')
-    : '';
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => prefix + line)
+    .join('\n');
 }
 
 export function generateDockerComposeYaml(
   block: Blockly.Block,
-  generator: DockerYamlGenerator
+  _generator: DockerYamlGenerator
 ): string {
-  const services = generator
-    .statementToCode(block, 'SERVICES')
-    .replace(/\n$/, '');
-  const networks = generator
-    .statementToCode(block, 'NETWORKS')
-    .replace(/\n$/, '');
+  const elements = statementBlocks(block, 'ELEMENTS');
+  const serviceYaml = elements
+    .filter((element) => element.type === 'service')
+    .map((service) => generateDockerServiceYaml(service, _generator).trimEnd())
+    .filter(Boolean)
+    .join('\n');
+  const networkYaml = elements
+    .filter((element) => element.type === 'network')
+    .map((network) => generateDockerNetworkYaml(network).trimEnd())
+    .filter(Boolean)
+    .join('\n');
 
-  return 'services:\n' + (services ? services + '\n' : '') +
-    (networks ? 'networks:\n' + networks + '\n' : '');
+  return 'services:\n' + (serviceYaml ? indentBlock(serviceYaml, 2) + '\n' : '') +
+    (networkYaml ? 'networks:\n' + indentBlock(networkYaml, 2) + '\n' : '');
 }
 
 export function generateDockerServiceYaml(
   block: Blockly.Block,
-  generator: DockerYamlGenerator
+  _generator: DockerYamlGenerator
 ): string {
   const name = block.getFieldValue('NAME') ?? '';
-  const image = String(block.getFieldValue('IMAGE') ?? '').trim();
-  const build = generator.valueToCode(block, 'BUILD', Order.NONE);
-  const restart = generator.valueToCode(block, 'RESTART', Order.NONE);
-  const healthcheck = generator
-    .valueToCode(block, 'HEALTHCHECK', Order.NONE)
-    .trimEnd();
-  const dependencies = generator.statementToCode(block, 'DEPENDS_ON').trimEnd();
-  const networks = generator.statementToCode(block, 'NETWORKS').trimEnd();
-  const ports = generator.statementToCode(block, 'PORTS').trimEnd();
-  const environments = generator.statementToCode(block, 'ENVIRONMENT').trimEnd();
-  const volumes = generator.statementToCode(block, 'VOLUMES').trimEnd();
+  const config = statementBlocks(block, 'CONFIG');
+  const images = config.filter((child) => child.type === 'image');
+  const builds = config.filter((child) => child.type === 'build');
+  const restarts = config.filter((child) => child.type === 'restart');
+  const healthchecks = config.filter((child) => child.type === 'healthcheck');
+  const dependencies = config.filter((child) => child.type === 'dependency');
+  const networks = config.filter((child) => child.type === 'networkref');
+  const ports = config.filter((child) => child.type === 'port');
+  const environments = config.filter((child) => child.type === 'environment');
+  const volumes = config.filter((child) => child.type === 'volume');
 
-  const listedDependencies = listItems(dependencies, '    - ');
-  const listedNetworks = listItems(networks, '    - ');
-  const listedPorts = listItems(ports, '    - ');
-  const listedEnvironments = listItems(environments, '    ');
-  const listedVolumes = listItems(volumes, '    - ');
+  const image = images
+    .map((imageBlock) => String(imageBlock.getFieldValue('IMAGE') ?? '').trim())
+    .find((value) => value.length > 0) ?? '';
+  const build = builds.length > 0 ? generateDockerBuildYaml(builds[0])[0] : '';
+  const restart = restarts.length > 0 ? generateDockerRestartYaml(restarts[0])[0] : '';
+  const healthcheck = healthchecks.length > 0
+    ? generateDockerHealthcheckYaml(healthchecks[0])[0].trimEnd()
+    : '';
+  const listedDependencies = dependencies
+    .map((dependency) => '    - ' + generateDockerDependencyYaml(dependency).trim())
+    .filter((line) => line.trim().length > 2)
+    .join('\n');
+  const listedNetworks = networks
+    .map((network) => '    - ' + generateDockerNetworkRefYaml(network).trim())
+    .filter((line) => line.trim().length > 2)
+    .join('\n');
+  const listedPorts = ports
+    .map((port) => '    - ' + generateDockerPortYaml(port).trim())
+    .join('\n');
+  const listedEnvironments = environments
+    .map((environment) => '    ' + generateDockerEnvironmentYaml(environment).trim())
+    .join('\n');
+  const listedVolumes = volumes
+    .map((volume) => '    - ' + generateDockerVolumeYaml(volume).trim())
+    .join('\n');
 
   return name + ':\n' +
     (image ? '  image: ' + image + '\n' : '') +
@@ -67,6 +99,12 @@ export function generateDockerServiceYaml(
     (listedPorts ? '  ports:\n' + listedPorts + '\n' : '') +
     (listedEnvironments ? '  environment:\n' + listedEnvironments + '\n' : '') +
     (listedVolumes ? '  volumes:\n' + listedVolumes + '\n' : '');
+}
+
+export function generateDockerImageYaml(block: Blockly.Block): string {
+  const image = block.getFieldValue('IMAGE') ?? '';
+
+  return 'image: ' + image + '\n';
 }
 
 export function generateDockerBuildYaml(block: Blockly.Block): [string, Order] {

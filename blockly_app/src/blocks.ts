@@ -6,25 +6,16 @@ export function defineBlocks() {
       {
         "type": "compose",
         "message0": "compose",
-        "message1": "{",
-        "message2": "Services: %1",
-        "args2": [
+        "message1": "Elements: %1",
+        "args1": [
           {
             "type": "input_statement",
-            "name": "SERVICES",
-            "check": "service"
+            "name": "ELEMENTS",
+            "check": "compose_element"
           }
         ],
-        "message3": "Networks: %1",
-        "args3": [
-          {
-            "type": "input_statement",
-            "name": "NETWORKS",
-            "check": "network"
-          }
-        ],
-        "message4": "}",
-        "colour": "#7C3AED"
+        "colour": "#7C3AED",
+        "tooltip": "Drop Compose elements here.\nSupports: Service, Network."
       },
       {
         "type": "service",
@@ -37,81 +28,33 @@ export function defineBlocks() {
             "text": "frontend"
           }
         ],
-        "message2": "Image: %1",
+        "message2": "Configuration: %1",
         "args2": [
+          {
+            "type": "input_statement",
+            "name": "CONFIG",
+            "check": "service_config"
+          }
+        ],
+        "tooltip": "Drop service configuration blocks here.\nSupports: Image, Build, Ports, Environment, Volumes, Depends On, Networks, Restart, Healthcheck.",
+        "colour": "#2563EB",
+        "previousStatement": "compose_element",
+        "nextStatement": "compose_element"
+      },
+      {
+        "type": "image",
+        "message0": "Image",
+        "message1": "Name: %1",
+        "args1": [
           {
             "type": "field_input",
             "name": "IMAGE",
-            "text": "nginx"
+            "text": "nginx:latest"
           }
         ],
-        "message3": "Build: %1",
-        "args3": [
-          {
-            "type": "input_value",
-            "name": "BUILD",
-            "check": "build"
-          }
-        ],
-        "message4": "Restart: %1",
-        "args4": [
-          {
-            "type": "input_value",
-            "name": "RESTART",
-            "check": "restart"
-          }
-        ],
-        "message5": "Healthcheck: %1",
-        "args5": [
-          {
-            "type": "input_value",
-            "name": "HEALTHCHECK",
-            "check": "healthcheck"
-          }
-        ],
-        "message6": "Depends On: %1",
-        "args6": [
-          {
-            "type": "input_statement",
-            "name": "DEPENDS_ON",
-            "check": "dependency"
-          }
-        ],
-        "message7": "Networks: %1",
-        "args7": [
-          {
-            "type": "input_statement",
-            "name": "NETWORKS",
-            "check": "networkref"
-          }
-        ],
-        "message8": "Ports: %1",
-        "args8": [
-          {
-            "type": "input_statement",
-            "name": "PORTS",
-            "check": "port"
-          }
-        ],
-        "message9": "Environment: %1",
-        "args9": [
-          {
-            "type": "input_statement",
-            "name": "ENVIRONMENT",
-            "check": "environment"
-          }
-        ],
-        "message10": "Volumes: %1",
-        "args10": [
-          {
-            "type": "input_statement",
-            "name": "VOLUMES",
-            "check": "volume"
-          }
-        ],
-        "colour": "#2563EB",
-        "previousStatement": "service",
-        "nextStatement": "service"
+        "colour": "#16A34A",
+        "previousStatement": "service_config",
+        "nextStatement": "service_config"
       },
       {
         "type": "dependency",
@@ -125,8 +68,8 @@ export function defineBlocks() {
           }
         ],
         "colour": "#F97316",
-        "previousStatement": "dependency",
-        "nextStatement": "dependency"
+        "previousStatement": "service_config",
+        "nextStatement": "service_config"
       },
       {
         "type": "build",
@@ -140,7 +83,8 @@ export function defineBlocks() {
           }
         ],
         "colour": "#EA580C",
-        "output": "build"
+        "previousStatement": "service_config",
+        "nextStatement": "service_config"
       },
       {
         "type": "restart",
@@ -170,7 +114,8 @@ export function defineBlocks() {
           }
         ],
         "colour": "#10B981",
-        "output": "restart"
+        "previousStatement": "service_config",
+        "nextStatement": "service_config"
       },
       {
         "type": "healthcheck",
@@ -208,7 +153,8 @@ export function defineBlocks() {
           }
         ],
         "colour": "#DB2777",
-        "output": "healthcheck"
+        "previousStatement": "service_config",
+        "nextStatement": "service_config"
       },
       {
         "type": "networkref",
@@ -222,8 +168,8 @@ export function defineBlocks() {
           }
         ],
         "colour": "#0891B2",
-        "previousStatement": "networkref",
-        "nextStatement": "networkref"
+        "previousStatement": "service_config",
+        "nextStatement": "service_config"
       },
       {
         "type": "network",
@@ -245,8 +191,8 @@ export function defineBlocks() {
           }
         ],
         "colour": "#06B6D4",
-        "previousStatement": "network",
-        "nextStatement": "network"
+        "previousStatement": "compose_element",
+        "nextStatement": "compose_element"
       },
       {
         "type": "port",
@@ -264,8 +210,8 @@ export function defineBlocks() {
           }
         ],
         "colour": "#EF4444",
-        "previousStatement": "port",
-        "nextStatement": "port"
+        "previousStatement": "service_config",
+        "nextStatement": "service_config"
       },
       {
         "type": "environment",
@@ -287,8 +233,8 @@ export function defineBlocks() {
           }
         ],
         "colour": "#8B5CF6",
-        "previousStatement": "environment",
-        "nextStatement": "environment"
+        "previousStatement": "service_config",
+        "nextStatement": "service_config"
       },
       {
         "type": "volume",
@@ -310,8 +256,8 @@ export function defineBlocks() {
           }
         ],
         "colour": "#0D9488",
-        "previousStatement": "volume",
-        "nextStatement": "volume"
+        "previousStatement": "service_config",
+        "nextStatement": "service_config"
       }
     ]
   );

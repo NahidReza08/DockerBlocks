@@ -69,6 +69,7 @@ function colourForRule(name) {
     const dockerColours = {
         compose: "#7C3AED",
         service: "#2563EB",
+        image: "#16A34A",
         build: "#EA580C",
         restart: "#10B981",
         healthcheck: "#DB2777",
@@ -135,6 +136,22 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
     // Docker Compose services use a compact, user-friendly visual layout.
     // The DSL generator still follows the grammar and emits:
     // service <name> { image <image> }
+    if (ruleLower === "compose") {
+        block.message0 = "compose";
+        block.message1 = "Elements: %1";
+        block.args1 = [
+            {
+                type: "input_statement",
+                name: "ELEMENTS",
+                check: "compose_element"
+            }
+        ];
+        block.colour = colourForRule(rule.name);
+        block.tooltip = "Drop Compose elements here.\nSupports: Service, Network.";
+
+        return block;
+    }
+
     if (ruleLower === "service") {
         block.message0 = "Service";
 
@@ -147,94 +164,37 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
 
-        block.message2 = "Image: %1";
+        block.message2 = "Configuration: %1";
         block.args2 = [
             {
-                type: "field_input",
-                name: "IMAGE",
-                text: "nginx"
-            }
-        ];
-
-        block.message3 = "Build: %1";
-        block.args3 = [
-            {
-                type: "input_value",
-                name: "BUILD",
-                check: "build"
-            }
-        ];
-
-        block.message4 = "Restart: %1";
-        block.args4 = [
-            {
-                type: "input_value",
-                name: "RESTART",
-                check: "restart"
-            }
-        ];
-
-        block.message5 = "Healthcheck: %1";
-        block.args5 = [
-            {
-                type: "input_value",
-                name: "HEALTHCHECK",
-                check: "healthcheck"
-            }
-        ];
-
-        block.message6 = "Depends On: %1";
-        block.args6 = [
-            {
                 type: "input_statement",
-                name: "DEPENDS_ON",
-                check: "dependency"
+                name: "CONFIG",
+                check: "service_config"
             }
         ];
-
-        block.message7 = "Networks: %1";
-        block.args7 = [
-            {
-                type: "input_statement",
-                name: "NETWORKS",
-                check: "networkref"
-            }
-        ];
-
-        block.message8 = "Ports: %1";
-        block.args8 = [
-            {
-                type: "input_statement",
-                name: "PORTS",
-                check: "port"
-            }
-        ];
-
-        block.message9 = "Environment: %1";
-        block.args9 = [
-            {
-                type: "input_statement",
-                name: "ENVIRONMENT",
-                check: "environment"
-            }
-        ];
-
-        block.message10 = "Volumes: %1";
-        block.args10 = [
-            {
-                type: "input_statement",
-                name: "VOLUMES",
-                check: "volume"
-            }
-        ];
+        block.tooltip = "Drop service configuration blocks here.\nSupports: Image, Build, Ports, Environment, Volumes, Depends On, Networks, Restart, Healthcheck.";
 
         block.colour = colourForRule(rule.name);
 
-        const stackType = stackTypes.get(ruleLower);
-        if (stackType) {
-            block.previousStatement = stackType;
-            block.nextStatement = stackType;
-        }
+        block.previousStatement = "compose_element";
+        block.nextStatement = "compose_element";
+
+        return block;
+    }
+
+    if (ruleLower === "image") {
+        block.message0 = "Image";
+        block.message1 = "Name: %1";
+        block.args1 = [
+            {
+                type: "field_input",
+                name: "IMAGE",
+                text: "nginx:latest"
+            }
+        ];
+        block.colour = colourForRule(rule.name);
+        block.previousStatement = "service_config";
+        block.nextStatement = "service_config";
 
         return block;
     }
@@ -250,7 +210,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
         block.colour = colourForRule(rule.name);
-        block.output = "build";
+        block.previousStatement = "service_config";
+        block.nextStatement = "service_config";
 
         return block;
     }
@@ -290,7 +251,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
         block.colour = colourForRule(rule.name);
-        block.output = "healthcheck";
+        block.previousStatement = "service_config";
+        block.nextStatement = "service_config";
 
         return block;
     }
@@ -310,7 +272,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
         block.colour = colourForRule(rule.name);
-        block.output = "restart";
+        block.previousStatement = "service_config";
+        block.nextStatement = "service_config";
 
         return block;
     }
@@ -326,12 +289,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
         block.colour = colourForRule(rule.name);
-
-        const stackType = stackTypes.get(ruleLower);
-        if (stackType) {
-            block.previousStatement = stackType;
-            block.nextStatement = stackType;
-        }
+        block.previousStatement = "service_config";
+        block.nextStatement = "service_config";
 
         return block;
     }
@@ -355,12 +314,29 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
         block.colour = colourForRule(rule.name);
+        block.previousStatement = "compose_element";
+        block.nextStatement = "compose_element";
 
-        const stackType = stackTypes.get(ruleLower);
-        if (stackType) {
-            block.previousStatement = stackType;
-            block.nextStatement = stackType;
-        }
+        return block;
+    }
+
+    if (ruleLower === "port") {
+        block.message0 = "port Host / Port: %1 -> Container / Port: %2";
+        block.args0 = [
+            {
+                type: "field_number",
+                name: "HOST_PORT",
+                value: 0
+            },
+            {
+                type: "field_number",
+                name: "CONTAINER_PORT",
+                value: 0
+            }
+        ];
+        block.colour = colourForRule(rule.name);
+        block.previousStatement = "service_config";
+        block.nextStatement = "service_config";
 
         return block;
     }
@@ -376,12 +352,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
         block.colour = colourForRule(rule.name);
-
-        const stackType = stackTypes.get(ruleLower);
-        if (stackType) {
-            block.previousStatement = stackType;
-            block.nextStatement = stackType;
-        }
+        block.previousStatement = "service_config";
+        block.nextStatement = "service_config";
 
         return block;
     }
@@ -405,12 +377,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
         block.colour = colourForRule(rule.name);
-
-        const stackType = stackTypes.get(ruleLower);
-        if (stackType) {
-            block.previousStatement = stackType;
-            block.nextStatement = stackType;
-        }
+        block.previousStatement = "service_config";
+        block.nextStatement = "service_config";
 
         return block;
     }
@@ -434,12 +402,8 @@ function ruleToBlockJson(rule, stackTypes, valueRules) {
             }
         ];
         block.colour = colourForRule(rule.name);
-
-        const stackType = stackTypes.get(ruleLower);
-        if (stackType) {
-            block.previousStatement = stackType;
-            block.nextStatement = stackType;
-        }
+        block.previousStatement = "service_config";
+        block.nextStatement = "service_config";
 
         return block;
     }
@@ -588,6 +552,14 @@ function ruleToGeneratorFunction(rule, stackTypes, valueRules) {
         ].join('\n');
     }
 
+    if (blockType === "image") {
+        return [
+            `generator.forBlock['image'] = function (block: Blockly.Block): string {`,
+            `  return generateDockerImageYaml(block);`,
+            `};`
+        ].join('\n');
+    }
+
     if (blockType === "build") {
         return [
             `generator.forBlock['build'] = function (block: Blockly.Block): [string, Order] {`,
@@ -686,7 +658,7 @@ export function generateGeneratorTs(irRules) {
     .map(rule => ruleToGeneratorFunction(rule, stackTypes, valueRules))
     .join("\n\n");
   const usesDockerYamlHelpers = irRules.some(rule =>
-    ["compose", "service", "build", "restart", "healthcheck", "dependency", "networkref", "network", "port", "environment", "volume"].includes(rule.name.toLowerCase())
+    ["compose", "service", "image", "build", "restart", "healthcheck", "dependency", "networkref", "network", "port", "environment", "volume"].includes(rule.name.toLowerCase())
   );
 
   const usesOrder = functions.includes("Order");
@@ -700,6 +672,7 @@ export function generateGeneratorTs(irRules) {
   generateDockerDependencyYaml,
   generateDockerEnvironmentYaml,
   generateDockerHealthcheckYaml,
+  generateDockerImageYaml,
   generateDockerNetworkRefYaml,
   generateDockerNetworkYaml,
   generateDockerPortYaml,
@@ -725,7 +698,7 @@ ${functions}
 export function generateMainTs(irRules) {
     const toolboxCategories = [];
 
-    const dockerBlockTypes = new Set(["compose", "service", "build", "restart", "healthcheck", "dependency", "networkref", "network", "port", "environment", "volume"]);
+    const dockerBlockTypes = new Set(["compose", "service", "image", "build", "restart", "healthcheck", "dependency", "networkref", "network", "port", "environment", "volume"]);
 
     const dockerRules = irRules.filter(r =>
         dockerBlockTypes.has(r.name.toLowerCase())
@@ -759,6 +732,7 @@ export function generateMainTs(irRules) {
         const dockerRuleNames = new Set(dockerRules.map(r => r.name.toLowerCase()));
         const structureBlocks = ["compose", "service", "network"].filter(type => dockerRuleNames.has(type));
         const serviceConfigurationBlocks = [
+            "image",
             "build",
             "port",
             "environment",

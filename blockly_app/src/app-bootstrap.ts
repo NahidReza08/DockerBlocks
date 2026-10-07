@@ -7,7 +7,7 @@ import {
 } from './docker-example';
 import {
   importDockerComposeYaml,
-  type DockerComposeImportIssue,
+  type DockerComposeImportReport,
   type DockerComposeImportResult
 } from './docker-compose-importer';
 import { collectDockerValidationErrors } from './docker-validation';
@@ -71,6 +71,10 @@ export function bootstrapBlocklyApp({
   const importYamlText = document.getElementById('importYamlText') as HTMLTextAreaElement | null;
   const importYamlFile = document.getElementById('importYamlFile') as HTMLInputElement | null;
   const importStatus = document.getElementById('importStatus');
+  const importInspectorDialog = document.getElementById('importInspectorDialog');
+  const importInspectorSummary = document.getElementById('importInspectorSummary');
+  const importInspectorBody = document.getElementById('importInspectorBody');
+  const clearWorkspaceDialog = document.getElementById('clearWorkspaceDialog');
   const validationUi = createValidationUi(workspace, errorOutput);
   const summaryElements = {
     service: document.getElementById('summaryServices'),
@@ -86,6 +90,7 @@ export function bootstrapBlocklyApp({
     healthcheck: document.getElementById('summaryHealthchecksItem'),
     volume: document.getElementById('summaryVolumesItem')
   };
+  let lastImportReport: DockerComposeImportReport | null = null;
 
   function collectValidationErrors() {
     return [
@@ -213,7 +218,6 @@ export function bootstrapBlocklyApp({
 
       if (blockType === 'service' && feature === 'image') {
         block.setFieldValue('web', 'NAME');
-        block.setFieldValue('nginx:latest', 'IMAGE');
       }
 
       block.initSvg?.();
@@ -286,26 +290,6 @@ export function bootstrapBlocklyApp({
     message.className = 'import-status-message';
     importStatus.appendChild(message);
 
-    const appendIssueList = (
-      label: string,
-      items: DockerComposeImportIssue[]
-    ) => {
-      if (items.length === 0) return;
-
-      const subtitle = document.createElement('div');
-      subtitle.className = 'import-status-subtitle';
-      subtitle.textContent = label;
-      importStatus.appendChild(subtitle);
-
-      const list = document.createElement('ul');
-      items.forEach((item) => {
-        const listItem = document.createElement('li');
-        listItem.textContent = item.path + ': ' + item.message;
-        list.appendChild(listItem);
-      });
-      importStatus.appendChild(list);
-    };
-
     if (!result.success) {
       importStatus.classList.add('error');
       title.textContent = 'YAML could not be imported';
@@ -316,6 +300,7 @@ export function bootstrapBlocklyApp({
     }
 
     const hasWarnings = result.warnings.length > 0 || result.unsupportedFields.length > 0;
+    const issueCount = result.warnings.length + result.unsupportedFields.length;
     importStatus.classList.add(hasWarnings ? 'warning' : 'success');
     title.textContent = hasWarnings
       ? 'YAML imported with warnings'
@@ -324,9 +309,17 @@ export function bootstrapBlocklyApp({
       result.importedServices + ' ' + (result.importedServices === 1 ? 'service' : 'services') +
       ' imported\n' +
       result.importedNetworks + ' ' + (result.importedNetworks === 1 ? 'network' : 'networks') +
-      ' imported';
-    appendIssueList('Unsupported fields skipped:', result.unsupportedFields);
-    appendIssueList('Import warnings:', result.warnings);
+      ' imported' +
+      (issueCount > 0 ? '\n' + issueCount + ' unsupported/partial ' + (issueCount === 1 ? 'item' : 'items') : '');
+
+    if (result.report) {
+      const detailsButton = document.createElement('button');
+      detailsButton.className = 'secondary-button import-details-button';
+      detailsButton.type = 'button';
+      detailsButton.textContent = 'View Import Details';
+      detailsButton.addEventListener('click', showImportInspector);
+      importStatus.appendChild(detailsButton);
+    }
   }
 
   function clearImportStatus() {
@@ -335,6 +328,79 @@ export function bootstrapBlocklyApp({
     importStatus.hidden = true;
     importStatus.replaceChildren();
     importStatus.classList.remove('success', 'warning', 'error');
+    lastImportReport = null;
+  }
+
+  function summarizeImportReport(report: DockerComposeImportReport) {
+    const counts = {
+      imported: 0,
+      partial: 0,
+      unsupported: 0,
+      ignored: 0
+    };
+
+    report.lines.forEach((line) => {
+      counts[line.status] += 1;
+    });
+
+    return counts.imported + ' lines imported, ' +
+      counts.partial + ' partial, ' +
+      counts.unsupported + ' skipped, ' +
+      counts.ignored + ' comments/ignored';
+  }
+
+  function statusLabel(status: string) {
+    if (status === 'imported') return 'Imported';
+    if (status === 'partial') return 'Partial / normalized';
+    if (status === 'unsupported') return 'Unsupported / skipped';
+    return 'Comment / blank / ignored';
+  }
+
+  function showImportInspector() {
+    if (!importInspectorDialog || !importInspectorBody || !importInspectorSummary) return;
+
+    importInspectorBody.replaceChildren();
+
+    if (!lastImportReport) {
+      importInspectorSummary.textContent = 'No imported YAML is available.';
+      importInspectorDialog.removeAttribute('hidden');
+      return;
+    }
+
+    importInspectorSummary.textContent = summarizeImportReport(lastImportReport);
+    const table = document.createElement('table');
+    table.className = 'import-line-table';
+
+    lastImportReport.lines.forEach((line) => {
+      const row = document.createElement('tr');
+      row.className = 'import-line ' + line.status;
+
+      const numberCell = document.createElement('td');
+      numberCell.className = 'import-line-number';
+      numberCell.textContent = String(line.line);
+
+      const codeCell = document.createElement('td');
+      codeCell.className = 'import-line-code';
+      codeCell.textContent = line.text || ' ';
+
+      const statusCell = document.createElement('td');
+      statusCell.className = 'import-line-status';
+      statusCell.textContent = statusLabel(line.status);
+
+      const reasonCell = document.createElement('td');
+      reasonCell.className = 'import-line-reason';
+      reasonCell.textContent = line.reason;
+
+      row.append(numberCell, codeCell, statusCell, reasonCell);
+      table.appendChild(row);
+    });
+
+    importInspectorBody.appendChild(table);
+    importInspectorDialog.removeAttribute('hidden');
+  }
+
+  function hideImportInspector() {
+    importInspectorDialog?.setAttribute('hidden', '');
   }
 
   function populateExampleSelector() {
@@ -362,6 +428,19 @@ export function bootstrapBlocklyApp({
     clearImportStatus();
     handleWorkspaceChange();
     showActionStatus('');
+  }
+
+  function showClearWorkspaceDialog() {
+    clearWorkspaceDialog?.removeAttribute('hidden');
+  }
+
+  function hideClearWorkspaceDialog() {
+    clearWorkspaceDialog?.setAttribute('hidden', '');
+  }
+
+  function confirmTrashClearWorkspace() {
+    hideClearWorkspaceDialog();
+    clearWorkspace();
   }
 
   function loadExample() {
@@ -402,6 +481,7 @@ export function bootstrapBlocklyApp({
       return result;
     }
 
+    lastImportReport = result.report ?? null;
     workspace.clear();
     Blockly.serialization.workspaces.load(result.workspaceState, workspace);
     (workspace as Blockly.WorkspaceSvg).scrollCenter?.();
@@ -495,6 +575,66 @@ export function bootstrapBlocklyApp({
     }
   }
 
+  function setupResizablePanels() {
+    const shell = document.querySelector<HTMLElement>('.app-shell');
+    if (!shell) return;
+
+    const clamp = (value: number, min: number, max: number) =>
+      Math.min(Math.max(value, min), max);
+
+    document.querySelectorAll<HTMLElement>('[data-resizer]').forEach((handle) => {
+      handle.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        const kind = handle.dataset.resizer;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const rect = shell.getBoundingClientRect();
+        const styles = getComputedStyle(shell);
+        const startToolbox = parseFloat(styles.getPropertyValue('--toolbox-width')) || 240;
+        const startYaml = parseFloat(styles.getPropertyValue('--yaml-width')) || 430;
+        const startBottom = parseFloat(styles.getPropertyValue('--bottom-height')) || 190;
+        const bottomGrid = document.querySelector<HTMLElement>('.bottom-grid');
+        const startValidation = bottomGrid
+          ? bottomGrid.getBoundingClientRect().width * 0.52
+          : rect.width * 0.5;
+
+        handle.classList.add('active');
+
+        const onMove = (moveEvent: PointerEvent) => {
+          if (kind === 'toolbox') {
+            shell.style.setProperty('--toolbox-width', clamp(startToolbox + moveEvent.clientX - startX, 190, 360) + 'px');
+          } else if (kind === 'yaml') {
+            shell.style.setProperty('--yaml-width', clamp(startYaml - (moveEvent.clientX - startX), 300, 640) + 'px');
+          } else if (kind === 'bottom') {
+            shell.style.setProperty('--bottom-height', clamp(startBottom - (moveEvent.clientY - startY), 150, 280) + 'px');
+          } else if (kind === 'validation') {
+            shell.style.setProperty('--validation-width', clamp(startValidation + moveEvent.clientX - startX, 350, rect.width - 320) + 'px');
+          }
+          resizeWorkspace();
+        };
+
+        const onUp = () => {
+          handle.classList.remove('active');
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          resizeWorkspace();
+        };
+
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+      });
+    });
+  }
+
+  function interceptTrashClick(event: MouseEvent) {
+    const target = event.target as Element | null;
+    if (!target?.closest?.('.blocklyTrash')) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    showClearWorkspaceDialog();
+  }
+
   populateExampleSelector();
   validationUi.refresh(collectValidationErrors());
   workspace.addChangeListener(handleWorkspaceChange);
@@ -503,12 +643,18 @@ export function bootstrapBlocklyApp({
   document.getElementById('openImportYaml')?.addEventListener('click', showImportDialog);
   document.getElementById('importYamlSubmit')?.addEventListener('click', importPastedYaml);
   document.getElementById('importYamlCancel')?.addEventListener('click', hideImportDialog);
+  document.getElementById('openImportInspector')?.addEventListener('click', showImportInspector);
+  document.getElementById('closeImportInspector')?.addEventListener('click', hideImportInspector);
+  document.getElementById('confirmTrashClear')?.addEventListener('click', confirmTrashClearWorkspace);
+  document.getElementById('cancelTrashClear')?.addEventListener('click', hideClearWorkspaceDialog);
   document.getElementById('chooseYamlFile')?.addEventListener('click', chooseYamlFile);
   importYamlFile?.addEventListener('change', importYamlFileChange);
   document.getElementById('validateWorkspace')?.addEventListener('click', validateWorkspace);
   document.getElementById('clearWorkspace')?.addEventListener('click', clearWorkspace);
   document.getElementById('copyYaml')?.addEventListener('click', copyYaml);
   document.getElementById('downloadYaml')?.addEventListener('click', downloadYaml);
+  blocklyDiv?.addEventListener('click', interceptTrashClick, true);
+  setupResizablePanels();
 
   let dragPreview: HTMLElement | null = null;
   let draggedPaletteItem: HTMLElement | null = null;

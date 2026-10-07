@@ -5,8 +5,9 @@ type ScrollableWorkspace = Blockly.Workspace & {
 };
 
 export type DockerComposeExampleId =
-  | 'simple-web-service'
-  | 'multi-service-application';
+  | 'full-compose'
+  | 'service'
+  | 'network';
 
 type WorkspaceState = Parameters<typeof Blockly.serialization.workspaces.load>[0];
 
@@ -14,7 +15,7 @@ export type DockerComposeExample = {
   id: DockerComposeExampleId;
   name: string;
   description: string;
-  buildWorkspaceState: () => WorkspaceState;
+  behavior: 'replace' | 'add-service' | 'add-network';
 };
 
 type BlockState = Blockly.serialization.blocks.State;
@@ -35,6 +36,10 @@ function stack(blocks: BlockState[]): BlockState | undefined {
 
 function block(type: string, fields = {}, inputs = {}): BlockState {
   return { type, fields, inputs };
+}
+
+function image(value: string): BlockState {
+  return block('image', { IMAGE: value });
 }
 
 function port(hostPort: number, containerPort: number): BlockState {
@@ -97,50 +102,23 @@ function network(name: string, driver = 'bridge'): BlockState {
 
 function service(options: {
   name: string;
-  image?: string;
-  build?: BlockState;
-  restart?: BlockState;
-  healthcheck?: BlockState;
-  dependencies?: BlockState[];
-  networks?: BlockState[];
-  ports?: BlockState[];
-  environment?: BlockState[];
-  volumes?: BlockState[];
+  configuration: BlockState[];
 }): BlockState {
+  const config = stack(options.configuration);
   const inputs: Record<string, { block: BlockState }> = {};
 
-  if (options.build) inputs.BUILD = { block: options.build };
-  if (options.restart) inputs.RESTART = { block: options.restart };
-  if (options.healthcheck) inputs.HEALTHCHECK = { block: options.healthcheck };
-
-  const dependencies = stack(options.dependencies ?? []);
-  const networks = stack(options.networks ?? []);
-  const ports = stack(options.ports ?? []);
-  const environmentEntries = stack(options.environment ?? []);
-  const volumes = stack(options.volumes ?? []);
-
-  if (dependencies) inputs.DEPENDS_ON = { block: dependencies };
-  if (networks) inputs.NETWORKS = { block: networks };
-  if (ports) inputs.PORTS = { block: ports };
-  if (environmentEntries) inputs.ENVIRONMENT = { block: environmentEntries };
-  if (volumes) inputs.VOLUMES = { block: volumes };
+  if (config) inputs.CONFIG = { block: config };
 
   return block('service', {
-    NAME: options.name,
-    IMAGE: options.image ?? ''
+    NAME: options.name
   }, inputs);
 }
 
-function compose(
-  services: BlockState[],
-  networks: BlockState[] = []
-): WorkspaceState {
-  const serviceStack = stack(services);
-  const networkStack = stack(networks);
+function compose(elements: BlockState[]): WorkspaceState {
+  const elementStack = stack(elements);
   const inputs: Record<string, { block: BlockState }> = {};
 
-  if (serviceStack) inputs.SERVICES = { block: serviceStack };
-  if (networkStack) inputs.NETWORKS = { block: networkStack };
+  if (elementStack) inputs.ELEMENTS = { block: elementStack };
 
   return {
     blocks: {
@@ -155,69 +133,128 @@ function compose(
   };
 }
 
-function simpleWebService(): WorkspaceState {
+function fullComposeState(): WorkspaceState {
   return compose([
     service({
       name: 'web',
-      image: 'nginx:latest',
-      restart: restart('unless-stopped'),
-      ports: [port(8080, 80)]
-    })
-  ]);
-}
-
-function multiServiceApplication(): WorkspaceState {
-  return compose([
-    service({
-      name: 'web',
-      image: 'docker-blocks-demo-web:latest',
-      build: build('.'),
-      restart: restart('unless-stopped'),
-      healthcheck: healthcheck(
-        'curl -f http://localhost || exit 1',
-        '30s',
-        '10s',
-        3
-      ),
-      dependencies: [dependency('database')],
-      networks: [networkRef('backend')],
-      ports: [port(8080, 80)],
-      environment: [
+      configuration: [
+        image('docker-blocks-demo-web:latest'),
+        build('.'),
+        restart('unless-stopped'),
+        healthcheck('curl -f http://localhost || exit 1', '30s', '10s', 3),
+        dependency('database'),
+        networkRef('backend'),
+        port(8080, 80),
         environment('APP_ENV', 'production'),
-        environment('DATABASE_HOST', 'database')
+        environment('DATABASE_HOST', 'database'),
+        volume('./web', '/usr/share/nginx/html')
       ]
     }),
     service({
       name: 'database',
-      image: 'postgres:latest',
-      restart: restart('unless-stopped'),
-      networks: [networkRef('backend')],
-      environment: [
+      configuration: [
+        image('postgres:latest'),
+        restart('unless-stopped'),
+        networkRef('backend'),
         environment('POSTGRES_DB', 'app'),
         environment('POSTGRES_USER', 'app'),
-        environment('POSTGRES_PASSWORD', 'example')
-      ],
-      volumes: [volume('./data', '/var/lib/postgresql/data')]
-    })
-  ], [
+        environment('POSTGRES_PASSWORD', 'example'),
+        volume('./data', '/var/lib/postgresql/data')
+      ]
+    }),
     network('backend')
   ]);
 }
 
+function serviceTemplateState(): BlockState {
+  return service({
+    name: 'api',
+    configuration: [
+      image('node:20-alpine'),
+      restart('unless-stopped'),
+      networkRef('backend'),
+      port(3000, 3000),
+      environment('NODE_ENV', 'development'),
+      volume('./app', '/usr/src/app')
+    ]
+  });
+}
+
 export const DOCKER_COMPOSE_EXAMPLES: DockerComposeExample[] = [
   {
-    id: 'simple-web-service',
-    name: 'Simple Web Service',
-    description: 'One nginx service with a port mapping and restart policy.',
-    buildWorkspaceState: simpleWebService
+    id: 'full-compose',
+    name: 'Full Compose',
+    description: 'Complete two-service Docker Compose scenario for demos.',
+    behavior: 'replace'
   },
   {
-    id: 'multi-service-application',
-    name: 'Multi-Service Application',
-    description: 'Web and database services with build, dependency, network, healthcheck, environment, volume, and restart blocks.',
-    buildWorkspaceState: multiServiceApplication
+    id: 'service',
+    name: 'Service',
+    description: 'Add one ready-made service to the current workspace.',
+    behavior: 'add-service'
+  },
+  {
+    id: 'network',
+    name: 'Network',
+    description: 'Add one top-level backend network resource.',
+    behavior: 'add-network'
   }
 ];
+
+function initAndRender(block: Blockly.Block) {
+  (block as Blockly.Block & { initSvg?: () => void; render?: () => void }).initSvg?.();
+  (block as Blockly.Block & { initSvg?: () => void; render?: () => void }).render?.();
+}
+
+function lastBlockInStack(block: Blockly.Block): Blockly.Block {
+  let current = block;
+  while (current.getNextBlock()) {
+    current = current.getNextBlock()!;
+  }
+
+  return current;
+}
+
+function appendComposeElement(workspace: Blockly.Workspace, blockType: string) {
+  const composeBlock = workspace
+    .getAllBlocks(false)
+    .find((block) => block.type === 'compose');
+  const addedBlock = workspace.newBlock(blockType);
+
+  if (blockType === 'service') {
+    addedBlock.setFieldValue('api', 'NAME');
+    const configInput = addedBlock.getInput('CONFIG')?.connection;
+    const state = serviceTemplateState();
+    const configState = state.inputs?.CONFIG?.block;
+    if (configState) Blockly.serialization.blocks.append(configState, workspace);
+    const configBlock = workspace
+      .getAllBlocks(false)
+      .find((block) => block.type === 'image' && block.getSurroundParent() === null);
+    if (configInput && configBlock?.previousConnection) {
+      configInput.connect(configBlock.previousConnection);
+    }
+  }
+
+  if (blockType === 'network') {
+    addedBlock.setFieldValue('backend', 'NAME');
+    addedBlock.setFieldValue('bridge', 'DRIVER');
+  }
+
+  if (composeBlock && addedBlock.previousConnection) {
+    const firstElement = composeBlock.getInputTargetBlock('ELEMENTS');
+    if (firstElement) {
+      const lastElement = lastBlockInStack(firstElement);
+      lastElement.nextConnection?.connect(addedBlock.previousConnection);
+    } else {
+      composeBlock.getInput('ELEMENTS')?.connection?.connect(addedBlock.previousConnection);
+    }
+  } else {
+    addedBlock.moveBy?.(64 + workspace.getAllBlocks(false).length * 12, 64);
+  }
+
+  initAndRender(addedBlock);
+  return addedBlock;
+}
 
 export function loadDockerComposeExample(
   workspace: Blockly.Workspace,
@@ -226,13 +263,17 @@ export function loadDockerComposeExample(
   const selectedExample = DOCKER_COMPOSE_EXAMPLES.find((example) => example.id === exampleId) ??
     DOCKER_COMPOSE_EXAMPLES[0];
 
-  workspace.clear();
-  Blockly.serialization.workspaces.load(
-    selectedExample.buildWorkspaceState(),
-    workspace
-  );
+  if (selectedExample.behavior === 'replace') {
+    workspace.clear();
+    Blockly.serialization.workspaces.load(fullComposeState(), workspace);
+    (workspace as ScrollableWorkspace).scroll?.(0, 0);
+    return selectedExample;
+  }
 
-  (workspace as ScrollableWorkspace).scroll?.(0, 0);
+  appendComposeElement(
+    workspace,
+    selectedExample.behavior === 'add-network' ? 'network' : 'service'
+  );
 
   return selectedExample;
 }

@@ -20,6 +20,25 @@ type BlockState = {
 export type DockerComposeImportIssue = {
   path: string;
   message: string;
+  line?: number;
+};
+
+export type DockerComposeImportLineStatus =
+  | 'imported'
+  | 'partial'
+  | 'unsupported'
+  | 'ignored';
+
+export type DockerComposeImportLineReport = {
+  line: number;
+  text: string;
+  status: DockerComposeImportLineStatus;
+  reason: string;
+};
+
+export type DockerComposeImportReport = {
+  sourceYaml: string;
+  lines: DockerComposeImportLineReport[];
 };
 
 export type DockerComposeImportResult = {
@@ -30,6 +49,7 @@ export type DockerComposeImportResult = {
   warnings: DockerComposeImportIssue[];
   unsupportedFields: DockerComposeImportIssue[];
   errors: DockerComposeImportIssue[];
+  report?: DockerComposeImportReport;
 };
 
 type NormalizedPort = {
@@ -98,8 +118,8 @@ const SUPPORTED_RESTART_POLICIES = new Set([
   'unless-stopped'
 ]);
 
-function issue(path: string, message: string): DockerComposeImportIssue {
-  return { path, message };
+function issue(path: string, message: string, line?: number): DockerComposeImportIssue {
+  return { path, message, ...(line ? { line } : {}) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -135,6 +155,82 @@ function addInput(
 ) {
   const first = stack(blocks);
   if (first) inputs[name] = { block: first };
+}
+
+function lineOfPath(yamlText: string, path: string): number | undefined {
+  const parts = path
+    .replace(/^\$\.?/, '')
+    .split('.')
+    .filter(Boolean);
+  if (parts.length === 0) return undefined;
+
+  const lines = yamlText.split(/\r?\n/);
+  const key = parts.at(-1)?.replace(/\[\d+\]$/, '');
+  if (!key) return undefined;
+
+  const pattern = new RegExp(`^\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`);
+  const index = lines.findIndex((line) => pattern.test(line));
+
+  return index >= 0 ? index + 1 : undefined;
+}
+
+function withIssueLocations(
+  yamlText: string,
+  issues: DockerComposeImportIssue[]
+): DockerComposeImportIssue[] {
+  return issues.map((item) => ({
+    ...item,
+    line: item.line ?? lineOfPath(yamlText, item.path)
+  }));
+}
+
+function buildImportReport(
+  yamlText: string,
+  warnings: DockerComposeImportIssue[],
+  unsupportedFields: DockerComposeImportIssue[]
+): DockerComposeImportReport {
+  const issueByLine = new Map<number, DockerComposeImportIssue[]>();
+  [...warnings, ...unsupportedFields].forEach((item) => {
+    if (!item.line) return;
+    const items = issueByLine.get(item.line) ?? [];
+    items.push(item);
+    issueByLine.set(item.line, items);
+  });
+
+  return {
+    sourceYaml: yamlText,
+    lines: yamlText.split(/\r?\n/).map((text, index) => {
+      const line = index + 1;
+      const trimmed = text.trim();
+      const lineIssues = issueByLine.get(line) ?? [];
+
+      if (trimmed.length === 0) {
+        return { line, text, status: 'ignored', reason: 'Blank line' };
+      }
+
+      if (trimmed.startsWith('#')) {
+        return { line, text, status: 'ignored', reason: 'Comment' };
+      }
+
+      if (/^version\s*:/.test(trimmed) || /^name\s*:/.test(trimmed)) {
+        return { line, text, status: 'ignored', reason: 'Ignored Compose metadata' };
+      }
+
+      if (lineIssues.some((item) => item.message.includes('object syntax'))) {
+        return { line, text, status: 'partial', reason: lineIssues[0].message };
+      }
+
+      if (lineIssues.length > 0) {
+        return { line, text, status: 'unsupported', reason: lineIssues[0].message };
+      }
+
+      if (/^(volumes|secrets|configs)\s*:/.test(trimmed) && !text.startsWith('    ')) {
+        return { line, text, status: 'unsupported', reason: 'Top-level resource is not supported by Docker-Blocks.' };
+      }
+
+      return { line, text, status: 'imported', reason: 'Imported' };
+    })
+  };
 }
 
 function scalarString(value: unknown): string | undefined {
@@ -594,40 +690,39 @@ function volumeBlock(volume: NormalizedVolume): BlockState {
 }
 
 function serviceBlock(service: NormalizedService): BlockState {
-  const inputs: Record<string, { block: BlockState }> = {};
+  const configBlocks: BlockState[] = [];
 
+  if (service.image) {
+    configBlocks.push(block('image', { IMAGE: service.image }));
+  }
   if (service.build) {
-    inputs.BUILD = {
-      block: block('build', { CONTEXT: service.build })
-    };
+    configBlocks.push(block('build', { CONTEXT: service.build }));
   }
 
   if (service.restart) {
-    inputs.RESTART = {
-      block: block('restart', { POLICY: service.restart })
-    };
+    configBlocks.push(block('restart', { POLICY: service.restart }));
   }
 
   if (service.healthcheck) {
-    inputs.HEALTHCHECK = {
-      block: block('healthcheck', {
-        COMMAND: service.healthcheck.command,
-        INTERVAL: service.healthcheck.interval,
-        TIMEOUT: service.healthcheck.timeout,
-        RETRIES: service.healthcheck.retries
-      })
-    };
+    configBlocks.push(block('healthcheck', {
+      COMMAND: service.healthcheck.command,
+      INTERVAL: service.healthcheck.interval,
+      TIMEOUT: service.healthcheck.timeout,
+      RETRIES: service.healthcheck.retries
+    }));
   }
 
-  addInput(inputs, 'DEPENDS_ON', service.dependencies.map((target) => block('dependency', { TARGET: target })));
-  addInput(inputs, 'NETWORKS', service.networks.map((target) => block('networkref', { TARGET: target })));
-  addInput(inputs, 'PORTS', service.ports.map(portBlock));
-  addInput(inputs, 'ENVIRONMENT', service.environment.map(environmentBlock));
-  addInput(inputs, 'VOLUMES', service.volumes.map(volumeBlock));
+  configBlocks.push(...service.dependencies.map((target) => block('dependency', { TARGET: target })));
+  configBlocks.push(...service.networks.map((target) => block('networkref', { TARGET: target })));
+  configBlocks.push(...service.ports.map(portBlock));
+  configBlocks.push(...service.environment.map(environmentBlock));
+  configBlocks.push(...service.volumes.map(volumeBlock));
+
+  const inputs: Record<string, { block: BlockState }> = {};
+  addInput(inputs, 'CONFIG', configBlocks);
 
   return block('service', {
-    NAME: service.name,
-    IMAGE: service.image ?? ''
+    NAME: service.name
   }, inputs);
 }
 
@@ -640,11 +735,12 @@ function networkBlock(network: NormalizedNetwork): BlockState {
 
 export function composeModelToBlocklyState(model: NormalizedComposeModel): WorkspaceState {
   const inputs: Record<string, { block: BlockState }> = {};
-  const serviceStack = stack(model.services.map(serviceBlock));
-  const networkStack = stack(model.networks.map(networkBlock));
+  const elementStack = stack([
+    ...model.services.map(serviceBlock),
+    ...model.networks.map(networkBlock)
+  ]);
 
-  if (serviceStack) inputs.SERVICES = { block: serviceStack };
-  if (networkStack) inputs.NETWORKS = { block: networkStack };
+  if (elementStack) inputs.ELEMENTS = { block: elementStack };
 
   return {
     blocks: {
@@ -669,7 +765,8 @@ export function importDockerComposeYaml(yamlText: string): DockerComposeImportRe
       importedNetworks: 0,
       warnings: [],
       unsupportedFields: [],
-      errors: parsed.errors
+      errors: parsed.errors,
+      report: buildImportReport(yamlText, [], [])
     };
   }
 
@@ -682,17 +779,21 @@ export function importDockerComposeYaml(yamlText: string): DockerComposeImportRe
       importedNetworks: 0,
       warnings: [],
       unsupportedFields: [],
-      errors: normalized.errors
+      errors: normalized.errors,
+      report: buildImportReport(yamlText, [], [])
     };
   }
+  const warnings = withIssueLocations(yamlText, normalized.model.warnings);
+  const unsupportedFields = withIssueLocations(yamlText, normalized.model.unsupportedFields);
 
   return {
     success: true,
     workspaceState: composeModelToBlocklyState(normalized.model),
     importedServices: normalized.model.services.length,
     importedNetworks: normalized.model.networks.length,
-    warnings: normalized.model.warnings,
-    unsupportedFields: normalized.model.unsupportedFields,
-    errors: []
+    warnings,
+    unsupportedFields,
+    errors: [],
+    report: buildImportReport(yamlText, warnings, unsupportedFields)
   };
 }

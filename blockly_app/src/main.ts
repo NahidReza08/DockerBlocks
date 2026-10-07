@@ -35,6 +35,10 @@ bootstrapBlocklyApp({
       "contents": [
         {
           "kind": "block",
+          "type": "image"
+        },
+        {
+          "kind": "block",
           "type": "build"
         },
         {
