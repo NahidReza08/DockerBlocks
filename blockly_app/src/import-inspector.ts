@@ -7,6 +7,8 @@ import type {
 type ImportInspectorRenderOptions = {
   report: DockerComposeImportReport | null;
   generatedYaml: string;
+  sourceType?: 'import' | 'edit';
+  titleElement?: HTMLElement | null;
   summaryElement: HTMLElement;
   bodyElement: HTMLElement;
 };
@@ -35,10 +37,14 @@ function countStatuses(report: DockerComposeImportReport) {
   return counts;
 }
 
-function renderSummary(report: DockerComposeImportReport) {
+function sourceLabel(sourceType: 'import' | 'edit') {
+  return sourceType === 'edit' ? 'Edited YAML' : 'Imported YAML';
+}
+
+function renderSummary(report: DockerComposeImportReport, sourceType: 'import' | 'edit') {
   const counts = countStatuses(report);
 
-  return 'Imported YAML  ' +
+  return sourceLabel(sourceType) + '  ' +
     '✓ ' + counts.imported + ' imported  ' +
     '⚠ ' + counts.partial + ' partial  ' +
     '✕ ' + (counts.unsupported + counts.invalid) + ' skipped  ' +
@@ -71,13 +77,13 @@ function createLine(line: DockerComposeImportLineReport) {
   return row;
 }
 
-function createSourcePane(report: DockerComposeImportReport) {
+function createSourcePane(report: DockerComposeImportReport, sourceType: 'import' | 'edit') {
   const pane = document.createElement('section');
   pane.className = 'import-inspector-pane source';
-  pane.setAttribute('aria-label', 'My Imported YAML');
+  pane.setAttribute('aria-label', sourceLabel(sourceType));
 
   const title = document.createElement('h3');
-  title.textContent = 'My Imported YAML';
+  title.textContent = sourceType === 'edit' ? 'Edited YAML' : 'My Imported YAML';
 
   const code = document.createElement('div');
   code.className = 'import-code-view source';
@@ -108,22 +114,30 @@ function createGeneratedPane(generatedYaml: string) {
 export function renderImportInspector({
   report,
   generatedYaml,
+  sourceType = 'import',
+  titleElement,
   summaryElement,
   bodyElement
 }: ImportInspectorRenderOptions) {
   bodyElement.replaceChildren();
+  if (titleElement) titleElement.textContent = sourceLabel(sourceType) + ' Inspector';
 
   if (!report) {
-    summaryElement.textContent = 'No imported YAML is available.';
+    if (titleElement) titleElement.textContent = 'YAML Transformation Inspector';
+    summaryElement.textContent = 'No YAML transformation history yet.';
+    const empty = document.createElement('div');
+    empty.className = 'import-inspector-empty';
+    empty.textContent = 'Import YAML or edit the generated YAML to see transformation details.';
+    bodyElement.appendChild(empty);
     return;
   }
 
-  summaryElement.textContent = renderSummary(report);
+  summaryElement.textContent = renderSummary(report, sourceType);
 
   const layout = document.createElement('div');
   layout.className = 'import-inspector-split';
   layout.append(
-    createSourcePane(report),
+    createSourcePane(report, sourceType),
     createGeneratedPane(generatedYaml)
   );
 

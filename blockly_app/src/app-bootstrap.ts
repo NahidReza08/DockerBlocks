@@ -25,10 +25,18 @@ type BootstrapOptions = {
 };
 
 type UiState = 'empty' | 'incomplete' | 'valid' | 'invalid';
+type YamlModalMode = 'import' | 'edit';
+type YamlTransformationSource = 'import' | 'edit';
 
 type PaletteDropPosition = {
   clientX: number;
   clientY: number;
+};
+
+type YamlTransformationContext = {
+  sourceType: YamlTransformationSource;
+  report: DockerComposeImportReport | null;
+  generatedYaml: string;
 };
 
 export function bootstrapBlocklyApp({
@@ -70,13 +78,18 @@ export function bootstrapBlocklyApp({
   const exampleSelect = document.getElementById('exampleSelect') as HTMLSelectElement | null;
   const copyYamlButton = document.getElementById('copyYaml');
   const importDialog = document.getElementById('importDialog');
+  const importDialogTitle = document.getElementById('importDialogTitle');
   const importYamlText = document.getElementById('importYamlText') as HTMLTextAreaElement | null;
   const importYamlFile = document.getElementById('importYamlFile') as HTMLInputElement | null;
+  const chooseYamlFileButton = document.getElementById('chooseYamlFile') as HTMLButtonElement | null;
+  const importYamlSubmit = document.getElementById('importYamlSubmit') as HTMLButtonElement | null;
   const importStatus = document.getElementById('importStatus');
   const importInspectorDialog = document.getElementById('importInspectorDialog');
+  const importInspectorTitle = document.getElementById('importInspectorTitle');
   const importInspectorSummary = document.getElementById('importInspectorSummary');
   const importInspectorBody = document.getElementById('importInspectorBody');
   const clearWorkspaceDialog = document.getElementById('clearWorkspaceDialog');
+  const replaceWorkspaceDialog = document.getElementById('replaceWorkspaceDialog');
   const validationUi = createValidationUi(workspace, errorOutput);
   const summaryElements = {
     service: document.getElementById('summaryServices'),
@@ -92,7 +105,9 @@ export function bootstrapBlocklyApp({
     healthcheck: document.getElementById('summaryHealthchecksItem'),
     volume: document.getElementById('summaryVolumesItem')
   };
-  let lastImportReport: DockerComposeImportReport | null = null;
+  let lastTransformation: YamlTransformationContext | null = null;
+  let yamlModalMode: YamlModalMode = 'import';
+  let pendingImportYaml: string | null = null;
 
   function collectValidationErrors() {
     return [
@@ -285,7 +300,14 @@ export function bootstrapBlocklyApp({
     if (actionStatus) actionStatus.textContent = message;
   }
 
-  function showImportStatus(result: DockerComposeImportResult) {
+  function transformationLabel(sourceType: YamlTransformationSource) {
+    return sourceType === 'edit' ? 'YAML edit' : 'YAML import';
+  }
+
+  function showTransformationStatus(
+    result: DockerComposeImportResult,
+    sourceType: YamlTransformationSource
+  ) {
     if (!importStatus) return;
 
     importStatus.hidden = false;
@@ -302,7 +324,7 @@ export function bootstrapBlocklyApp({
 
     if (!result.success) {
       importStatus.classList.add('error');
-      title.textContent = 'YAML could not be imported';
+      title.textContent = transformationLabel(sourceType) + ' failed';
       message.textContent = result.errors
         .map((error) => error.message)
         .join('\n');
@@ -312,9 +334,9 @@ export function bootstrapBlocklyApp({
     const hasWarnings = result.warnings.length > 0 || result.unsupportedFields.length > 0;
     const issueCount = result.warnings.length + result.unsupportedFields.length;
     importStatus.classList.add(hasWarnings ? 'warning' : 'success');
-    title.textContent = hasWarnings
-      ? 'YAML imported with warnings'
-      : 'YAML imported successfully';
+    title.textContent = sourceType === 'edit'
+      ? (hasWarnings ? 'YAML edit applied with warnings' : 'YAML edit applied successfully')
+      : (hasWarnings ? 'YAML imported with warnings' : 'YAML imported successfully');
     message.textContent =
       result.importedServices + ' ' + (result.importedServices === 1 ? 'service' : 'services') +
       ' imported\n' +
@@ -326,7 +348,7 @@ export function bootstrapBlocklyApp({
       const detailsButton = document.createElement('button');
       detailsButton.className = 'secondary-button import-details-button';
       detailsButton.type = 'button';
-      detailsButton.textContent = 'View Import Details';
+      detailsButton.textContent = sourceType === 'edit' ? 'View Edit Details' : 'View Import Details';
       detailsButton.addEventListener('click', showImportInspector);
       importStatus.appendChild(detailsButton);
     }
@@ -338,15 +360,17 @@ export function bootstrapBlocklyApp({
     importStatus.hidden = true;
     importStatus.replaceChildren();
     importStatus.classList.remove('success', 'warning', 'error');
-    lastImportReport = null;
+    lastTransformation = null;
   }
 
   function showImportInspector() {
     if (!importInspectorDialog || !importInspectorBody || !importInspectorSummary) return;
 
     renderImportInspector({
-      report: lastImportReport,
-      generatedYaml: generator.workspaceToCode(workspace),
+      report: lastTransformation?.report ?? null,
+      generatedYaml: lastTransformation?.generatedYaml ?? generator.workspaceToCode(workspace),
+      sourceType: lastTransformation?.sourceType,
+      titleElement: importInspectorTitle,
       summaryElement: importInspectorSummary,
       bodyElement: importInspectorBody
     });
@@ -411,18 +435,40 @@ export function bootstrapBlocklyApp({
     showActionStatus(selectedExample.name + ' loaded.');
   }
 
-  function validateWorkspace() {
-    handleWorkspaceChange();
-    showActionStatus(
-      deriveUiState(validationUi.currentErrors, codeOutput?.textContent ?? '') === 'valid'
-        ? 'Workspace validation passed.'
-        : 'Validation errors found.'
-    );
+  function workspaceHasBlocks() {
+    return workspace.getAllBlocks(false).length > 0;
+  }
+
+  function configureYamlDialog(mode: YamlModalMode) {
+    yamlModalMode = mode;
+    if (importDialogTitle) {
+      importDialogTitle.textContent = mode === 'edit'
+        ? 'Edit Docker Compose YAML'
+        : 'Import Docker Compose YAML';
+    }
+    if (chooseYamlFileButton) chooseYamlFileButton.hidden = mode === 'edit';
+    if (importYamlFile) importYamlFile.value = '';
+    if (importYamlSubmit) {
+      importYamlSubmit.textContent = mode === 'edit' ? 'Apply to Blocks' : 'Import';
+    }
+    if (importYamlText) {
+      importYamlText.setAttribute(
+        'aria-label',
+        mode === 'edit' ? 'Docker Compose YAML to apply to blocks' : 'Docker Compose YAML to import'
+      );
+    }
   }
 
   function showImportDialog() {
+    configureYamlDialog('import');
     if (importYamlText) importYamlText.value = '';
-    if (importYamlFile) importYamlFile.value = '';
+    importDialog?.removeAttribute('hidden');
+    importYamlText?.focus();
+  }
+
+  function showEditDialog() {
+    configureYamlDialog('edit');
+    if (importYamlText) importYamlText.value = generator.workspaceToCode(workspace);
     importDialog?.removeAttribute('hidden');
     importYamlText?.focus();
   }
@@ -431,28 +477,68 @@ export function bootstrapBlocklyApp({
     importDialog?.setAttribute('hidden', '');
   }
 
-  function applyImportText(yamlText: string) {
+  function hideReplaceWorkspaceDialog() {
+    replaceWorkspaceDialog?.setAttribute('hidden', '');
+    pendingImportYaml = null;
+  }
+
+  function showReplaceWorkspaceDialog(yamlText: string) {
+    pendingImportYaml = yamlText;
+    replaceWorkspaceDialog?.removeAttribute('hidden');
+  }
+
+  function applyYamlText(yamlText: string, sourceType: YamlTransformationSource) {
     const result = importDockerComposeYaml(yamlText);
-    showImportStatus(result);
+    showTransformationStatus(result, sourceType);
+
+    lastTransformation = {
+      sourceType,
+      report: result.report ?? null,
+      generatedYaml: generator.workspaceToCode(workspace)
+    };
 
     if (!result.success || !result.workspaceState) {
-      showActionStatus('YAML could not be imported.');
+      showActionStatus(sourceType === 'edit'
+        ? 'YAML edit could not be applied.'
+        : 'YAML could not be imported.');
       return result;
     }
 
-    lastImportReport = result.report ?? null;
     workspace.clear();
     Blockly.serialization.workspaces.load(result.workspaceState, workspace);
     (workspace as Blockly.WorkspaceSvg).scrollCenter?.();
     hideImportDialog();
     handleWorkspaceChange();
-    showActionStatus('YAML imported.');
+    lastTransformation = {
+      sourceType,
+      report: result.report ?? null,
+      generatedYaml: generator.workspaceToCode(workspace)
+    };
+    showActionStatus(sourceType === 'edit' ? 'YAML edit applied.' : 'YAML imported.');
 
     return result;
   }
 
   function importPastedYaml() {
-    applyImportText(importYamlText?.value ?? '');
+    const yamlText = importYamlText?.value ?? '';
+    if (yamlModalMode === 'edit') {
+      applyYamlText(yamlText, 'edit');
+      return;
+    }
+
+    if (workspaceHasBlocks()) {
+      showReplaceWorkspaceDialog(yamlText);
+      return;
+    }
+
+    applyYamlText(yamlText, 'import');
+  }
+
+  function confirmReplaceWorkspace() {
+    const yamlText = pendingImportYaml;
+    hideReplaceWorkspaceDialog();
+    if (yamlText === null) return;
+    applyYamlText(yamlText, 'import');
   }
 
   function chooseYamlFile() {
@@ -464,7 +550,7 @@ export function bootstrapBlocklyApp({
     if (!file) return;
 
     if (!/\.(ya?ml)$/i.test(file.name)) {
-      showImportStatus({
+      showTransformationStatus({
         success: false,
         importedServices: 0,
         importedNetworks: 0,
@@ -474,16 +560,21 @@ export function bootstrapBlocklyApp({
           path: '$',
           message: 'Only .yml and .yaml files can be imported.'
         }]
-      });
+      }, 'import');
       return;
     }
 
     const reader = new FileReader();
     reader.addEventListener('load', () => {
-      applyImportText(String(reader.result ?? ''));
+      const yamlText = String(reader.result ?? '');
+      if (workspaceHasBlocks()) {
+        showReplaceWorkspaceDialog(yamlText);
+        return;
+      }
+      applyYamlText(yamlText, 'import');
     });
     reader.addEventListener('error', () => {
-      showImportStatus({
+      showTransformationStatus({
         success: false,
         importedServices: 0,
         importedNetworks: 0,
@@ -493,7 +584,7 @@ export function bootstrapBlocklyApp({
           path: '$',
           message: 'Could not read the selected YAML file.'
         }]
-      });
+      }, 'import');
     });
     reader.readAsText(file);
   }
@@ -608,15 +699,17 @@ export function bootstrapBlocklyApp({
 
   document.getElementById('loadExample')?.addEventListener('click', loadExample);
   document.getElementById('openImportYaml')?.addEventListener('click', showImportDialog);
+  document.getElementById('editYaml')?.addEventListener('click', showEditDialog);
   document.getElementById('importYamlSubmit')?.addEventListener('click', importPastedYaml);
   document.getElementById('importYamlCancel')?.addEventListener('click', hideImportDialog);
   document.getElementById('openImportInspector')?.addEventListener('click', showImportInspector);
   document.getElementById('closeImportInspector')?.addEventListener('click', hideImportInspector);
   document.getElementById('confirmTrashClear')?.addEventListener('click', confirmTrashClearWorkspace);
   document.getElementById('cancelTrashClear')?.addEventListener('click', hideClearWorkspaceDialog);
+  document.getElementById('confirmReplaceWorkspace')?.addEventListener('click', confirmReplaceWorkspace);
+  document.getElementById('cancelReplaceWorkspace')?.addEventListener('click', hideReplaceWorkspaceDialog);
   document.getElementById('chooseYamlFile')?.addEventListener('click', chooseYamlFile);
   importYamlFile?.addEventListener('change', importYamlFileChange);
-  document.getElementById('validateWorkspace')?.addEventListener('click', validateWorkspace);
   document.getElementById('clearWorkspace')?.addEventListener('click', clearWorkspace);
   document.getElementById('copyYaml')?.addEventListener('click', copyYaml);
   document.getElementById('downloadYaml')?.addEventListener('click', downloadYaml);

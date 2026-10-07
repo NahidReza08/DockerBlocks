@@ -81,11 +81,12 @@ const ids = [
   'summaryDependenciesItem', 'summaryHealthchecksItem',
   'summaryEmptyTitle', 'summaryEmptyMessage',
   'summaryServices', 'summaryNetworks', 'summaryVolumes', 'summaryDependencies', 'summaryHealthchecks',
-  'exampleSelect', 'loadExample', 'openImportYaml', 'importDialog', 'importYamlText',
+  'exampleSelect', 'loadExample', 'openImportYaml', 'editYaml', 'importDialog', 'importDialogTitle', 'importYamlText',
   'importYamlFile', 'importStatus', 'importYamlSubmit', 'importYamlCancel', 'chooseYamlFile',
   'openImportInspector', 'importInspectorDialog', 'importInspectorSummary', 'importInspectorBody',
   'closeImportInspector', 'clearWorkspaceDialog', 'confirmTrashClear', 'cancelTrashClear',
-  'validateWorkspace', 'clearWorkspace', 'copyYaml', 'downloadYaml'
+  'replaceWorkspaceDialog', 'confirmReplaceWorkspace', 'cancelReplaceWorkspace',
+  'clearWorkspace', 'copyYaml', 'downloadYaml'
 ];
 const elements = Object.fromEntries(ids.map(id => [id, element()]));
 elements.blocklyDiv.rect = { left: 100, top: 100, right: 700, bottom: 500, width: 600, height: 400 };
@@ -96,6 +97,7 @@ elements.downloadYaml.setAttribute('aria-label', 'Download YAML');
 elements.importDialog.hidden = true;
 elements.importInspectorDialog.hidden = true;
 elements.clearWorkspaceDialog.hidden = true;
+elements.replaceWorkspaceDialog.hidden = true;
 elements.importStatus.hidden = true;
 const shell = element();
 shell.className = 'app-shell';
@@ -184,6 +186,10 @@ try {
   assert.equal(elements.codeOutput.textContent, '');
   assert.match(textContentDeep(elements.errorOutput), /No configuration yet/);
   assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
+  click('openImportInspector');
+  assert.match(textContentDeep(elements.importInspectorSummary), /No YAML transformation history yet/);
+  assert.match(textContentDeep(elements.importInspectorBody), /Import YAML or edit the generated YAML/);
+  click('closeImportInspector');
 
   click('loadExample');
   assert.equal(elements.actionStatus.textContent, 'Full Compose loaded.');
@@ -193,16 +199,61 @@ try {
   assert.ok(elements.codeOutput.textContent.includes('healthcheck:'));
   const yamlAfterFullExample = elements.codeOutput.textContent;
 
+  click('editYaml');
+  assert.equal(elements.importDialog.hidden, false);
+  assert.equal(elements.importDialogTitle.textContent, 'Edit Docker Compose YAML');
+  assert.equal(elements.importYamlText.value, yamlAfterFullExample);
+  assert.equal(elements.chooseYamlFile.hidden, true);
+  assert.equal(elements.importYamlSubmit.textContent, 'Apply to Blocks');
+  click('importYamlCancel');
+  assert.equal(elements.codeOutput.textContent, yamlAfterFullExample, 'Canceling YAML edit preserves workspace');
+
+  click('editYaml');
+  elements.importYamlText.value = [
+    'services:',
+    '  edited:',
+    '    image: nginx',
+    '    ports:',
+    '      - "8080:80"',
+    '    command: npm start',
+    ''
+  ].join('\n');
+  click('importYamlSubmit');
+  assert.equal(elements.importDialog.hidden, true);
+  assert.match(textContentDeep(elements.importStatus), /YAML edit applied with warnings/);
+  assert.equal(elements.summaryServices.textContent, '1');
+  assert.match(elements.codeOutput.textContent, /edited:/);
+  assert.match(elements.codeOutput.textContent, /"8080:80"/);
+  assert.doesNotMatch(elements.codeOutput.textContent, /command:/);
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
+  click('openImportInspector');
+  assert.match(textContentDeep(elements.importInspectorSummary), /Edited YAML/);
+  assert.match(textContentDeep(elements.importInspectorBody), /Edited YAML/);
+  assert.match(textContentDeep(elements.importInspectorBody), /command: npm start/);
+  click('closeImportInspector');
+
+  const yamlAfterEdit = elements.codeOutput.textContent;
+  click('editYaml');
+  elements.importYamlText.value = 'services:\n  web: [';
+  click('importYamlSubmit');
+  assert.equal(elements.codeOutput.textContent, yamlAfterEdit, 'Malformed YAML edit preserves workspace');
+  assert.equal(elements.importDialog.hidden, false);
+  assert.match(textContentDeep(elements.importStatus), /YAML edit failed/);
+  click('importYamlCancel');
+
   elements.exampleSelect.value = 'service';
-  assert.equal(elements.summaryServices.textContent, '2', 'Changing example selection alone does not load');
+  assert.equal(elements.summaryServices.textContent, '1', 'Changing example selection alone does not load');
   click('loadExample');
-  assert.equal(elements.summaryServices.textContent, '3', 'Service example adds without clearing');
-  assert.ok(elements.codeOutput.textContent.length > yamlAfterFullExample.length);
+  assert.equal(elements.summaryServices.textContent, '2', 'Service example adds without clearing');
+  assert.ok(elements.codeOutput.textContent.length > yamlAfterEdit.length);
   elements.exampleSelect.value = 'network';
   click('loadExample');
-  assert.equal(elements.summaryNetworks.textContent, '2', 'Network example adds without clearing');
+  assert.equal(elements.summaryNetworks.textContent, '1', 'Network example adds without clearing');
 
   click('openImportYaml');
+  assert.equal(elements.importDialogTitle.textContent, 'Import Docker Compose YAML');
+  assert.equal(elements.chooseYamlFile.hidden, false);
+  assert.equal(elements.importYamlSubmit.textContent, 'Import');
   const importedYaml = [
     "version: '3.8'",
     '# Database Service',
@@ -221,6 +272,13 @@ try {
   ].join('\n');
   elements.importYamlText.value = importedYaml;
   click('importYamlSubmit');
+  assert.equal(elements.replaceWorkspaceDialog.hidden, false, 'Non-empty workspace import asks before replacing');
+  const beforeReplaceYaml = elements.codeOutput.textContent;
+  click('cancelReplaceWorkspace');
+  assert.equal(elements.replaceWorkspaceDialog.hidden, true);
+  assert.equal(elements.codeOutput.textContent, beforeReplaceYaml, 'Canceling replacement preserves workspace');
+  click('importYamlSubmit');
+  click('confirmReplaceWorkspace');
   assert.equal(elements.importDialog.hidden, true);
   assert.match(textContentDeep(elements.importStatus), /YAML imported with warnings/);
   assert.match(textContentDeep(elements.importStatus), /unsupported\/partial/);
@@ -245,10 +303,12 @@ try {
   click('openImportYaml');
   elements.importYamlText.value = 'services:\n  web: [';
   click('importYamlSubmit');
+  click('confirmReplaceWorkspace');
   assert.equal(elements.codeOutput.textContent, beforeMalformed, 'Malformed YAML preserves workspace');
   assert.equal(elements.importDialog.hidden, false);
   click('importYamlCancel');
 
+  click('clearWorkspace');
   elements.importYamlFile.files = [{ name: 'docker-compose.yaml', textContent: 'services:\n  worker:\n    image: alpine\n' }];
   elements.importYamlFile.listeners.change();
   assert.equal(elements.summaryServices.textContent, '1', 'File import replaces workspace');
@@ -263,7 +323,7 @@ try {
   assert.equal(elements.codeOutput.textContent, '');
   assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
   click('openImportInspector');
-  assert.match(textContentDeep(elements.importInspectorSummary), /No imported YAML/);
+  assert.match(textContentDeep(elements.importInspectorSummary), /No YAML transformation history/);
   click('closeImportInspector');
 
   const trashTarget = element();
@@ -303,11 +363,13 @@ try {
 
   const html = read('blockly_app/index.html');
   for (const id of [
-    'openImportYaml', 'openImportInspector', 'importInspectorDialog',
+    'openImportYaml', 'editYaml', 'openImportInspector', 'importInspectorDialog',
+    'replaceWorkspaceDialog', 'confirmReplaceWorkspace', 'cancelReplaceWorkspace',
     'clearWorkspaceDialog', 'confirmTrashClear', 'cancelTrashClear'
   ]) {
     assert.ok(html.includes(`id="${id}"`), `HTML includes ${id}`);
   }
+  assert.equal(html.includes('id="validateWorkspace"'), false, 'Manual Validate button is removed');
   assert.equal((html.match(/data-resizer=/g) ?? []).length, 4, 'Four layout resizers are present');
   assert.equal((html.match(/data-block-type=/g) ?? []).length, 12, 'Palette exposes every supported block action');
   assert.ok(html.includes('class="example-loader"'), 'Example select and load button are merged into one control');
@@ -316,6 +378,9 @@ try {
   assert.ok(html.includes('icon-hierarchy') && html.includes('icon-sliders') && html.includes('icon-collection'), 'Toolbox category icons are distinct');
   assert.ok(read('blockly_app/src/app-bootstrap.ts').includes('maxTrashcanContents: 0'), 'Blockly trash history flyout is disabled');
   assert.ok(html.includes('validation-panel-content') && html.includes('overflow-y: auto'), 'Validation body owns the scroll container');
+  assert.equal(/\.validation-panel-content\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(html), false, 'Validation scroll body avoids overlapping positioning');
+  assert.equal(/\.import-status\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(html), false, 'Import status remains in normal document flow');
+  assert.equal(/#errorOutput[\s\S]*overflow:\s*visible/.test(html), true, 'Validation cards remain normal-flow content inside the scroll body');
   assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "CONFIG"'), 'Generated Service uses dynamic CONFIG chain');
   assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "ELEMENTS"'), 'Generated Compose uses dynamic ELEMENTS chain');
 
