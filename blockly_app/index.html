@@ -53,7 +53,7 @@
         font-size: 13px;
       }
 
-      button, select {
+      button, select, textarea {
         font: inherit;
       }
 
@@ -65,7 +65,7 @@
         font-weight: 600;
       }
 
-      button:focus-visible, select:focus-visible, .palette-item:focus-visible {
+      button:focus-visible, select:focus-visible, textarea:focus-visible, .palette-item:focus-visible {
         outline: 3px solid rgba(37, 99, 235, 0.24);
         outline-offset: 2px;
       }
@@ -188,6 +188,8 @@
 
       .action-button.primary { background: var(--blue); }
       .action-button.primary:hover { background: var(--blue-hover); }
+      .action-button.import { background: var(--purple); }
+      .action-button.import:hover { background: #6d28d9; }
       .action-button.success { background: var(--success); }
       .action-button.success:hover { background: #15803d; }
       .action-button.danger { background: #ef4444; }
@@ -481,6 +483,127 @@
 
       #actionStatus:empty { display: none; }
 
+      .import-status {
+        margin: 0 12px 12px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--panel-soft);
+      }
+
+      .import-status.success {
+        border-color: var(--success-border);
+        background: var(--success-bg);
+      }
+
+      .import-status.warning {
+        border-color: var(--warning-border);
+        background: var(--warning-bg);
+      }
+
+      .import-status.error {
+        border-color: var(--error-border);
+        background: var(--error-bg);
+      }
+
+      .import-status-title {
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .import-status-message,
+      .import-status li {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+        white-space: pre-line;
+      }
+
+      .import-status-subtitle {
+        margin-top: 8px;
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .import-status ul {
+        margin: 4px 0 0;
+        padding-left: 18px;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, 0.36);
+      }
+
+      .modal-backdrop[hidden] { display: none; }
+
+      .import-dialog {
+        width: min(720px, 100%);
+        max-height: min(720px, calc(100vh - 40px));
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+      }
+
+      .import-dialog-header {
+        padding: 14px 16px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .import-dialog-title {
+        margin: 0;
+        color: var(--text);
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .import-dialog-body {
+        min-height: 0;
+        padding: 14px 16px;
+      }
+
+      #importYamlText {
+        width: 100%;
+        min-height: 300px;
+        resize: vertical;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--button-radius);
+        color: var(--text);
+        background: #ffffff;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+
+      .import-dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 0 16px 16px;
+      }
+
+      .secondary-button {
+        height: 36px;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+      }
+
+      .secondary-button:hover { background: var(--panel-soft); }
+
       .bottom-grid {
         display: grid;
         grid-template-columns: minmax(420px, 1fr) minmax(360px, 0.95fr);
@@ -704,6 +827,7 @@
       <symbol id="icon-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z"/><path d="M14 2v6h6"/></symbol>
       <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
       <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></symbol>
+      <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/></symbol>
       <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
       <symbol id="icon-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></symbol>
       <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></symbol>
@@ -726,6 +850,7 @@
             <select id="exampleSelect" aria-label="Choose example"></select>
           </label>
           <button id="loadExample" class="action-button primary" type="button"><svg><use href="#icon-folder"></use></svg>Load Example</button>
+          <button id="openImportYaml" class="action-button import" type="button"><svg><use href="#icon-upload"></use></svg>Import YAML</button>
           <button id="validateWorkspace" class="action-button success" type="button"><svg><use href="#icon-check"></use></svg>Validate</button>
           <button id="clearWorkspace" class="action-button danger" type="button"><svg><use href="#icon-trash"></use></svg>Clear</button>
         </div>
@@ -793,6 +918,7 @@
             <div class="panel-title"><svg><use href="#icon-check"></use></svg>Validation Results</div>
           </div>
           <div id="errorOutput"></div>
+          <div id="importStatus" class="import-status" hidden></div>
         </section>
 
         <section class="panel" aria-label="Workspace Summary">
@@ -834,6 +960,23 @@
             </div>
           </div>
         </section>
+      </section>
+    </div>
+
+    <div id="importDialog" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="importDialogTitle">
+      <section class="import-dialog">
+        <div class="import-dialog-header">
+          <h2 id="importDialogTitle" class="import-dialog-title">Import Docker Compose YAML</h2>
+        </div>
+        <div class="import-dialog-body">
+          <textarea id="importYamlText" spellcheck="false" aria-label="Docker Compose YAML to import" placeholder="services:&#10;  web:&#10;    image: nginx:latest"></textarea>
+        </div>
+        <div class="import-dialog-actions">
+          <button id="chooseYamlFile" class="secondary-button" type="button">Choose file</button>
+          <input id="importYamlFile" type="file" accept=".yml,.yaml,application/x-yaml,text/yaml,text/plain" hidden />
+          <button id="importYamlCancel" class="secondary-button" type="button">Cancel</button>
+          <button id="importYamlSubmit" class="action-button primary" type="button">Import</button>
+        </div>
       </section>
     </div>
 

@@ -5,6 +5,11 @@ import {
   DOCKER_COMPOSE_EXAMPLES,
   loadDockerComposeExample
 } from './docker-example';
+import {
+  importDockerComposeYaml,
+  type DockerComposeImportIssue,
+  type DockerComposeImportResult
+} from './docker-compose-importer';
 import { collectDockerValidationErrors } from './docker-validation';
 import { createValidationUi } from './validation-ui';
 
@@ -62,6 +67,10 @@ export function bootstrapBlocklyApp({
   const blocklyDiv = document.getElementById('blocklyDiv');
   const exampleSelect = document.getElementById('exampleSelect') as HTMLSelectElement | null;
   const copyYamlButton = document.getElementById('copyYaml');
+  const importDialog = document.getElementById('importDialog');
+  const importYamlText = document.getElementById('importYamlText') as HTMLTextAreaElement | null;
+  const importYamlFile = document.getElementById('importYamlFile') as HTMLInputElement | null;
+  const importStatus = document.getElementById('importStatus');
   const validationUi = createValidationUi(workspace, errorOutput);
   const summaryElements = {
     service: document.getElementById('summaryServices'),
@@ -262,6 +271,72 @@ export function bootstrapBlocklyApp({
     if (actionStatus) actionStatus.textContent = message;
   }
 
+  function showImportStatus(result: DockerComposeImportResult) {
+    if (!importStatus) return;
+
+    importStatus.hidden = false;
+    importStatus.classList.remove('success', 'warning', 'error');
+    importStatus.replaceChildren();
+
+    const title = document.createElement('div');
+    title.className = 'import-status-title';
+    importStatus.appendChild(title);
+
+    const message = document.createElement('div');
+    message.className = 'import-status-message';
+    importStatus.appendChild(message);
+
+    const appendIssueList = (
+      label: string,
+      items: DockerComposeImportIssue[]
+    ) => {
+      if (items.length === 0) return;
+
+      const subtitle = document.createElement('div');
+      subtitle.className = 'import-status-subtitle';
+      subtitle.textContent = label;
+      importStatus.appendChild(subtitle);
+
+      const list = document.createElement('ul');
+      items.forEach((item) => {
+        const listItem = document.createElement('li');
+        listItem.textContent = item.path + ': ' + item.message;
+        list.appendChild(listItem);
+      });
+      importStatus.appendChild(list);
+    };
+
+    if (!result.success) {
+      importStatus.classList.add('error');
+      title.textContent = 'YAML could not be imported';
+      message.textContent = result.errors
+        .map((error) => error.message)
+        .join('\n');
+      return;
+    }
+
+    const hasWarnings = result.warnings.length > 0 || result.unsupportedFields.length > 0;
+    importStatus.classList.add(hasWarnings ? 'warning' : 'success');
+    title.textContent = hasWarnings
+      ? 'YAML imported with warnings'
+      : 'YAML imported successfully';
+    message.textContent =
+      result.importedServices + ' ' + (result.importedServices === 1 ? 'service' : 'services') +
+      ' imported\n' +
+      result.importedNetworks + ' ' + (result.importedNetworks === 1 ? 'network' : 'networks') +
+      ' imported';
+    appendIssueList('Unsupported fields skipped:', result.unsupportedFields);
+    appendIssueList('Import warnings:', result.warnings);
+  }
+
+  function clearImportStatus() {
+    if (!importStatus) return;
+
+    importStatus.hidden = true;
+    importStatus.replaceChildren();
+    importStatus.classList.remove('success', 'warning', 'error');
+  }
+
   function populateExampleSelector() {
     if (!exampleSelect) return;
 
@@ -284,6 +359,7 @@ export function bootstrapBlocklyApp({
     if (codeOutput) codeOutput.textContent = '';
     if (lineNumbers) lineNumbers.textContent = '';
     if (exampleSelect) exampleSelect.value = DOCKER_COMPOSE_EXAMPLES[0].id;
+    clearImportStatus();
     handleWorkspaceChange();
     showActionStatus('');
   }
@@ -304,6 +380,83 @@ export function bootstrapBlocklyApp({
         ? 'Workspace validation passed.'
         : 'Validation errors found.'
     );
+  }
+
+  function showImportDialog() {
+    if (importYamlText) importYamlText.value = '';
+    if (importYamlFile) importYamlFile.value = '';
+    importDialog?.removeAttribute('hidden');
+    importYamlText?.focus();
+  }
+
+  function hideImportDialog() {
+    importDialog?.setAttribute('hidden', '');
+  }
+
+  function applyImportText(yamlText: string) {
+    const result = importDockerComposeYaml(yamlText);
+    showImportStatus(result);
+
+    if (!result.success || !result.workspaceState) {
+      showActionStatus('YAML could not be imported.');
+      return result;
+    }
+
+    workspace.clear();
+    Blockly.serialization.workspaces.load(result.workspaceState, workspace);
+    (workspace as Blockly.WorkspaceSvg).scrollCenter?.();
+    hideImportDialog();
+    handleWorkspaceChange();
+    showActionStatus('YAML imported.');
+
+    return result;
+  }
+
+  function importPastedYaml() {
+    applyImportText(importYamlText?.value ?? '');
+  }
+
+  function chooseYamlFile() {
+    importYamlFile?.click();
+  }
+
+  function importYamlFileChange() {
+    const file = importYamlFile?.files?.[0];
+    if (!file) return;
+
+    if (!/\.(ya?ml)$/i.test(file.name)) {
+      showImportStatus({
+        success: false,
+        importedServices: 0,
+        importedNetworks: 0,
+        warnings: [],
+        unsupportedFields: [],
+        errors: [{
+          path: '$',
+          message: 'Only .yml and .yaml files can be imported.'
+        }]
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      applyImportText(String(reader.result ?? ''));
+    });
+    reader.addEventListener('error', () => {
+      showImportStatus({
+        success: false,
+        importedServices: 0,
+        importedNetworks: 0,
+        warnings: [],
+        unsupportedFields: [],
+        errors: [{
+          path: '$',
+          message: 'Could not read the selected YAML file.'
+        }]
+      });
+    });
+    reader.readAsText(file);
   }
 
   async function copyYaml() {
@@ -347,6 +500,11 @@ export function bootstrapBlocklyApp({
   workspace.addChangeListener(handleWorkspaceChange);
 
   document.getElementById('loadExample')?.addEventListener('click', loadExample);
+  document.getElementById('openImportYaml')?.addEventListener('click', showImportDialog);
+  document.getElementById('importYamlSubmit')?.addEventListener('click', importPastedYaml);
+  document.getElementById('importYamlCancel')?.addEventListener('click', hideImportDialog);
+  document.getElementById('chooseYamlFile')?.addEventListener('click', chooseYamlFile);
+  importYamlFile?.addEventListener('change', importYamlFileChange);
   document.getElementById('validateWorkspace')?.addEventListener('click', validateWorkspace);
   document.getElementById('clearWorkspace')?.addEventListener('click', clearWorkspace);
   document.getElementById('copyYaml')?.addEventListener('click', copyYaml);

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import * as Blockly from 'blockly';
 import { javascriptGenerator, Order } from 'blockly/javascript';
 import ts from 'typescript';
+import { parseDocument } from 'yaml';
 import { loadGrammar } from '../../generate_blockly/src/grammar-loader.js';
 import { buildIR } from '../../generate_blockly/src/ir-builder.js';
 import { generateMainTs } from '../../generate_blockly/src/blockly-ts-target.js';
@@ -23,6 +24,19 @@ function execute(source, context) {
   vm.runInContext(ts.transpileModule(script, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
   }).outputText, context);
+}
+
+function executeScoped(source, context, expose) {
+  const script = source
+    .replace(/^import[\s\S]*?;\r?\n/gm, '')
+    .replace(/^export /gm, '');
+  const output = ts.transpileModule(script, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
+  }).outputText;
+  const exposedBindings = expose
+    .map(name => `globalThis.${name} = ${name};`)
+    .join('\n');
+  vm.runInContext(`(() => {\n${output}\n${exposedBindings}\n})();`, context);
 }
 
 function element() {
@@ -45,7 +59,15 @@ function element() {
     get lastElementChild() { return this.children.at(-1) ?? null; },
     replaceChildren() { this.children = []; this.textContent = ''; },
     addEventListener(type, handler) { this.listeners[type] = handler; },
-    setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'title') this.title = String(value); },
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+      if (name === 'title') this.title = String(value);
+      if (name === 'hidden') this.hidden = true;
+    },
+    removeAttribute(name) {
+      delete this.attributes[name];
+      if (name === 'hidden') this.hidden = false;
+    },
     getAttribute(name) { return this.attributes[name] ?? null; },
     getBoundingClientRect() { return this.rect ?? { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
     cloneNode() {
@@ -56,6 +78,7 @@ function element() {
       return clone;
     },
     click() { this.clicked = true; this.listeners.click?.(); },
+    focus() { this.focused = true; },
     remove() { this.removed = true; }
   };
 }
@@ -81,7 +104,9 @@ const ids = [
   'summaryDependenciesItem', 'summaryHealthchecksItem',
   'summaryEmptyTitle', 'summaryEmptyMessage', 'blocklyDiv',
   'summaryServices', 'summaryNetworks', 'summaryVolumes', 'summaryDependencies', 'summaryHealthchecks',
-  'exampleSelect', 'loadExample', 'validateWorkspace', 'clearWorkspace', 'copyYaml', 'downloadYaml'
+  'exampleSelect', 'loadExample', 'openImportYaml', 'importDialog', 'importYamlText',
+  'importYamlFile', 'importStatus', 'importYamlSubmit', 'importYamlCancel', 'chooseYamlFile',
+  'validateWorkspace', 'clearWorkspace', 'copyYaml', 'downloadYaml'
 ];
 const elements = Object.fromEntries(ids.map(id => [id, element()]));
 elements.blocklyDiv.rect = { left: 100, top: 100, right: 700, bottom: 500, width: 600, height: 400 };
@@ -89,6 +114,8 @@ elements.copyYaml.setAttribute('title', 'Copy YAML');
 elements.copyYaml.setAttribute('aria-label', 'Copy YAML');
 elements.downloadYaml.setAttribute('title', 'Download YAML');
 elements.downloadYaml.setAttribute('aria-label', 'Download YAML');
+elements.importDialog.hidden = true;
+elements.importStatus.hidden = true;
 const paletteItems = [
   'compose', 'service', 'service', 'build', 'port', 'environment',
   'volume', 'dependency', 'networkref', 'restart', 'healthcheck', 'network'
@@ -108,9 +135,29 @@ const documentListeners = {};
 let copied;
 let injectedOptions;
 const navigator = { clipboard: { async writeText(text) { copied = text; } } };
+class FileReaderMock {
+  constructor() {
+    this.listeners = {};
+    this.result = '';
+  }
+
+  addEventListener(type, handler) {
+    this.listeners[type] = handler;
+  }
+
+  readAsText(file) {
+    if (file.error) {
+      this.listeners.error?.();
+      return;
+    }
+
+    this.result = file.textContent ?? file.content ?? '';
+    this.listeners.load?.();
+  }
+}
 const context = vm.createContext({
   Blockly: { ...Blockly, inject: (_id, options) => { injectedOptions = options; return workspace; } }, javascriptGenerator, Order,
-  validationErrors: [], navigator, Blob,
+  validationErrors: [], navigator, Blob, FileReader: FileReaderMock, parseDocument,
   URL: {
     createObjectURL(blob) { downloads.push(blob); return 'blob:yaml'; },
     revokeObjectURL(url) { revoked.push(url); }
@@ -159,11 +206,16 @@ function validationText() {
   return textContentDeep(elements.errorOutput);
 }
 
+function importStatusText() {
+  return textContentDeep(elements.importStatus);
+}
+
 try {
   execute(read('blockly_app/src/docker-yaml.ts'), context);
   execute(read('blockly_app/src/docker-validation.ts'), context);
   execute(read('blockly_app/src/validation-ui.ts'), context);
   execute(read('blockly_app/src/docker-example.ts'), context);
+  executeScoped(read('blockly_app/src/docker-compose-importer.ts'), context, ['importDockerComposeYaml']);
   execute(read('blockly_app/src/app-bootstrap.ts'), context);
   execute(read('blockly_app/src/blocks.ts'), context);
   execute(read('blockly_app/src/generator.ts'), context);
@@ -222,6 +274,140 @@ try {
   assert.match(validationText(), /Start by adding a Compose block/);
   assert.equal(elements.errorOutput.children[0].className, 'validation-empty-state');
   assert.equal(validationText().includes('Ports valid'), false, 'Empty workspace does not show unrelated green validation');
+
+  click('openImportYaml');
+  assert.equal(elements.importDialog.hidden, false, 'Import YAML opens the import dialog');
+  assert.equal(elements.importYamlText.value, '', 'Import dialog starts with an empty paste area');
+  assert.equal(elements.importYamlText.focused, true, 'Import dialog focuses the YAML textarea');
+  click('importYamlCancel');
+  assert.equal(elements.importDialog.hidden, true, 'Cancel closes the import dialog');
+
+  click('openImportYaml');
+  elements.importYamlText.value = [
+    'services:',
+    '  web:',
+    '    image: nginx:latest',
+    '    restart: unless-stopped',
+    '    ports:',
+    '      - "8080:80"',
+    ''
+  ].join('\n');
+  click('importYamlSubmit');
+  assert.equal(elements.importDialog.hidden, true, 'Successful paste import closes the import dialog');
+  assert.equal(elements.importStatus.hidden, false, 'Successful import shows import status');
+  assert.match(importStatusText(), /YAML imported successfully/);
+  assert.match(importStatusText(), /1 service imported/);
+  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'service').length, 1);
+  assert.equal(workspace.getAllBlocks(false).filter(block => block.type === 'restart').length, 1);
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
+  assert.equal(validationMessages().length, 0);
+  assert.ok(elements.codeOutput.textContent.includes('restart: unless-stopped'));
+  const generatedImportDoc = parseDocument(elements.codeOutput.textContent).toJS();
+  assert.equal(generatedImportDoc.services.web.image, 'nginx:latest', 'Generated YAML after import is parseable');
+  assert.deepEqual(generatedImportDoc.services.web.ports, ['8080:80']);
+
+  const yamlBeforeMalformedImport = elements.codeOutput.textContent;
+  const blockCountBeforeMalformedImport = workspace.getAllBlocks(false).length;
+  click('openImportYaml');
+  elements.importYamlText.value = 'services:\n  web: [';
+  click('importYamlSubmit');
+  assert.equal(elements.importDialog.hidden, false, 'Failed paste import leaves the dialog available for correction');
+  assert.match(importStatusText(), /YAML could not be imported/);
+  assert.equal(workspace.getAllBlocks(false).length, blockCountBeforeMalformedImport,
+    'Malformed YAML import does not destroy the existing workspace');
+  assert.equal(elements.codeOutput.textContent, yamlBeforeMalformedImport,
+    'Malformed YAML import preserves the previously generated YAML');
+  click('importYamlCancel');
+
+  click('openImportYaml');
+  elements.importYamlText.value = [
+    'services:',
+    '  web:',
+    '    image: nginx:latest',
+    '    command: npm start',
+    '    ports:',
+    '      - "8080:80"',
+    ''
+  ].join('\n');
+  click('importYamlSubmit');
+  assert.match(importStatusText(), /YAML imported with warnings/);
+  assert.match(importStatusText(), /Unsupported fields skipped:/);
+  assert.match(importStatusText(), /services\.web\.command/);
+  assert.equal(elements.yamlStatus.textContent, 'Valid',
+    'Unsupported imported fields are reported separately from normal validation');
+  assert.equal(validationMessages().length, 0);
+
+  click('openImportYaml');
+  elements.importYamlText.value = [
+    'services:',
+    '  web:',
+    '    ports:',
+    '      - "8080:80"',
+    ''
+  ].join('\n');
+  click('importYamlSubmit');
+  assert.equal(elements.yamlStatus.textContent, 'Invalid', 'Normal validation runs after import');
+  assert.deepEqual(validationMessages(), ['Service requires an image or build configuration.']);
+  assert.ok(elements.codeOutput.textContent.includes('ports:'));
+
+  click('openImportYaml');
+  elements.importYamlText.value = [
+    'services:',
+    '  web:',
+    '    image: nginx:latest',
+    '    depends_on:',
+    '      - db',
+    '    networks:',
+    '      - backend',
+    '  db:',
+    '    image: postgres:16',
+    'networks:',
+    '  backend:',
+    '    driver: bridge',
+    ''
+  ].join('\n');
+  click('importYamlSubmit');
+  assert.equal(elements.summaryServices.textContent, '2', 'Paste import supports multiple services');
+  assert.equal(elements.summaryNetworks.textContent, '1', 'Paste import supports top-level networks');
+  assert.equal(elements.summaryDependencies.textContent, '1', 'Paste import supports dependencies');
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
+  assert.ok(elements.codeOutput.textContent.includes('depends_on:\n      - db'));
+  assert.ok(elements.codeOutput.textContent.includes('networks:\n  backend:\n    driver: bridge'));
+  const generatedMultiImportDoc = parseDocument(elements.codeOutput.textContent).toJS();
+  assert.equal(generatedMultiImportDoc.services.web.depends_on[0], 'db');
+  assert.equal(generatedMultiImportDoc.networks.backend.driver, 'bridge');
+
+  click('chooseYamlFile');
+  assert.equal(elements.importYamlFile.clicked, true, 'Choose file delegates to the hidden file input');
+  const yamlBeforeBadFileImport = elements.codeOutput.textContent;
+  elements.importYamlFile.files = [{ name: 'compose.txt', textContent: 'services:\n  bad:\n    image: alpine\n' }];
+  elements.importYamlFile.listeners.change();
+  assert.match(importStatusText(), /Only \.yml and \.yaml files can be imported/);
+  assert.equal(elements.codeOutput.textContent, yamlBeforeBadFileImport,
+    'Unsupported file extension does not replace the workspace');
+  elements.importYamlFile.files = [{
+    name: 'docker-compose.yaml',
+    textContent: [
+      'services:',
+      '  worker:',
+      '    image: alpine:latest',
+      '    restart: "no"',
+      '    labels:',
+      '      app: worker',
+      ''
+    ].join('\n')
+  }];
+  elements.importYamlFile.listeners.change();
+  assert.match(importStatusText(), /YAML imported with warnings/);
+  assert.match(importStatusText(), /services\.worker\.labels/);
+  assert.equal(elements.summaryServices.textContent, '1', 'File import replaces workspace with imported services');
+  assert.ok(elements.codeOutput.textContent.includes('restart: "no"'),
+    'File import preserves parse-safe restart no generation');
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
+
+  click('clearWorkspace');
+  assert.equal(elements.importStatus.hidden, true, 'Clear resets reverse import status');
+  assert.equal(importStatusText(), '');
 
   paletteItems[1].click();
   assert.equal(workspace.getAllBlocks(false).length, 0, 'Clicking a palette row does not create a block');
@@ -491,10 +677,13 @@ try {
   assert.match(elements.actionStatus.textContent, /copy it manually/);
   clean();
   const html = read('blockly_app/index.html');
-  for (const [id, label] of [['exampleSelect', 'Example'], ['loadExample', 'Load Example'], ['validateWorkspace', 'Validate'], ['clearWorkspace', 'Clear'],
+  for (const [id, label] of [['exampleSelect', 'Example'], ['loadExample', 'Load Example'], ['openImportYaml', 'Import YAML'], ['validateWorkspace', 'Validate'], ['clearWorkspace', 'Clear'],
     ['copyYaml', 'Copy'], ['downloadYaml', 'Download']]) {
     assert.ok(html.includes(`id="${id}"`));
     assert.ok(html.includes(label));
+  }
+  for (const id of ['importDialog', 'importYamlText', 'importYamlSubmit', 'importYamlCancel', 'chooseYamlFile', 'importYamlFile', 'importStatus']) {
+    assert.ok(html.includes(`id="${id}"`), `Import UI includes ${id}`);
   }
   for (const label of [
     'Structure', 'Service Configuration', 'Resources', 'Compose', 'Service', 'Network',
