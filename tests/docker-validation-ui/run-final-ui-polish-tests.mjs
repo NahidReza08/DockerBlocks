@@ -75,6 +75,17 @@ function validationMessages() {
     .map(child => textContentDeep(child));
 }
 
+function assertNoBlankImportStatus(label) {
+  assert.equal(elements.importStatus.hidden, true, `${label}: import status is hidden without import/edit content`);
+  assert.equal(elements.importStatus.children.length, 0, `${label}: import status has no empty rendered children`);
+  assert.equal(textContentDeep(elements.importStatus), '', `${label}: import status has no empty rendered text`);
+}
+
+function assertVisibleImportStatus(label) {
+  assert.equal(elements.importStatus.hidden, false, `${label}: import status is visible`);
+  assert.notEqual(textContentDeep(elements.importStatus).trim(), '', `${label}: import status has meaningful content`);
+}
+
 const ids = [
   'codeOutput', 'lineNumbers', 'errorOutput', 'actionStatus', 'yamlStatus', 'blocklyDiv',
   'summaryEmpty', 'summaryServicesItem', 'summaryNetworksItem', 'summaryVolumesItem',
@@ -186,6 +197,7 @@ try {
   assert.equal(elements.codeOutput.textContent, '');
   assert.match(textContentDeep(elements.errorOutput), /No configuration yet/);
   assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
+  assertNoBlankImportStatus('Empty workspace validation panel');
   click('openImportInspector');
   assert.match(textContentDeep(elements.importInspectorSummary), /No YAML transformation history yet/);
   assert.match(textContentDeep(elements.importInspectorBody), /Import YAML or edit the generated YAML/);
@@ -197,7 +209,37 @@ try {
   assert.equal(elements.summaryNetworks.textContent, '1');
   assert.equal(elements.yamlStatus.textContent, 'Valid');
   assert.ok(elements.codeOutput.textContent.includes('healthcheck:'));
-  const yamlAfterFullExample = elements.codeOutput.textContent;
+  assertNoBlankImportStatus('Valid Blockly validation panel');
+  let yamlAfterFullExample = elements.codeOutput.textContent;
+
+  workspace.clear();
+  Blockly.serialization.workspaces.load({
+    blocks: {
+      languageVersion: 0,
+      blocks: [{
+        type: 'compose',
+        inputs: {
+          ELEMENTS: {
+            block: {
+              type: 'service',
+              fields: { NAME: 'web' }
+            }
+          }
+        }
+      }]
+    }
+  }, workspace);
+  context.app.handleWorkspaceChange();
+  assert.match(textContentDeep(elements.errorOutput), /requires an image or build configuration/);
+  assert.equal(validationMessages().length, 1);
+  assertNoBlankImportStatus('Invalid Blockly validation panel');
+
+  click('loadExample');
+  assert.equal(elements.actionStatus.textContent, 'Full Compose loaded.');
+  assert.equal(elements.summaryServices.textContent, '2');
+  assert.equal(elements.summaryNetworks.textContent, '1');
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
+  yamlAfterFullExample = elements.codeOutput.textContent;
 
   click('editYaml');
   assert.equal(elements.importDialog.hidden, false);
@@ -221,6 +263,7 @@ try {
   click('importYamlSubmit');
   assert.equal(elements.importDialog.hidden, true);
   assert.match(textContentDeep(elements.importStatus), /YAML edit applied with warnings/);
+  assertVisibleImportStatus('YAML edit warning status');
   assert.equal(elements.summaryServices.textContent, '1');
   assert.match(elements.codeOutput.textContent, /edited:/);
   assert.match(elements.codeOutput.textContent, /"8080:80"/);
@@ -239,6 +282,7 @@ try {
   assert.equal(elements.codeOutput.textContent, yamlAfterEdit, 'Malformed YAML edit preserves workspace');
   assert.equal(elements.importDialog.hidden, false);
   assert.match(textContentDeep(elements.importStatus), /YAML edit failed/);
+  assertVisibleImportStatus('YAML edit failure status');
   click('importYamlCancel');
 
   elements.exampleSelect.value = 'service';
@@ -282,6 +326,7 @@ try {
   assert.equal(elements.importDialog.hidden, true);
   assert.match(textContentDeep(elements.importStatus), /YAML imported with warnings/);
   assert.match(textContentDeep(elements.importStatus), /unsupported\/partial/);
+  assertVisibleImportStatus('YAML import warning status');
   assert.equal(validationMessages().length, 0, 'Unsupported fields stay out of normal validation');
   click('openImportInspector');
   assert.equal(elements.importInspectorDialog.hidden, false);
@@ -312,6 +357,7 @@ try {
   elements.importYamlFile.files = [{ name: 'docker-compose.yaml', textContent: 'services:\n  worker:\n    image: alpine\n' }];
   elements.importYamlFile.listeners.change();
   assert.equal(elements.summaryServices.textContent, '1', 'File import replaces workspace');
+  assertVisibleImportStatus('YAML file import success status');
 
   resizers[0].listeners.pointerdown({ preventDefault() {}, clientX: 200, clientY: 0 });
   documentListeners.pointermove({ clientX: 260, clientY: 0 });
@@ -320,6 +366,7 @@ try {
 
   click('clearWorkspace');
   assert.equal(elements.importStatus.hidden, true);
+  assertNoBlankImportStatus('Cleared workspace validation panel');
   assert.equal(elements.codeOutput.textContent, '');
   assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
   click('openImportInspector');
@@ -380,6 +427,7 @@ try {
   assert.ok(html.includes('validation-panel-content') && html.includes('overflow-y: auto'), 'Validation body owns the scroll container');
   assert.equal(/\.validation-panel-content\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(html), false, 'Validation scroll body avoids overlapping positioning');
   assert.equal(/\.import-status\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(html), false, 'Import status remains in normal document flow');
+  assert.ok(/\.import-status\[hidden\]\s*\{[^}]*display:\s*none/.test(html), 'Hidden import status occupies no validation panel layout space');
   assert.equal(/#errorOutput[\s\S]*overflow:\s*visible/.test(html), true, 'Validation cards remain normal-flow content inside the scroll body');
   assert.ok(html.includes('.import-status-header'), 'Import status uses a header row for right-aligned actions');
   assert.ok(
