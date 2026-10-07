@@ -314,9 +314,13 @@ export function bootstrapBlocklyApp({
     importStatus.classList.remove('success', 'warning', 'error');
     importStatus.replaceChildren();
 
+    const header = document.createElement('div');
+    header.className = 'import-status-header';
+    importStatus.appendChild(header);
+
     const title = document.createElement('div');
     title.className = 'import-status-title';
-    importStatus.appendChild(title);
+    header.appendChild(title);
 
     const message = document.createElement('div');
     message.className = 'import-status-message';
@@ -346,11 +350,24 @@ export function bootstrapBlocklyApp({
 
     if (result.report) {
       const detailsButton = document.createElement('button');
-      detailsButton.className = 'secondary-button import-details-button';
+      detailsButton.className = 'import-details-button';
       detailsButton.type = 'button';
-      detailsButton.textContent = sourceType === 'edit' ? 'View Edit Details' : 'View Import Details';
+      detailsButton.title = sourceType === 'edit' ? 'View edit details' : 'View import details';
+      detailsButton.setAttribute(
+        'aria-label',
+        sourceType === 'edit' ? 'View edit details' : 'View import details'
+      );
+
+      const icon = document.createElement('span');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = 'ⓘ';
+
+      const label = document.createElement('span');
+      label.textContent = sourceType === 'edit' ? 'View Edit Details' : 'View Import Details';
+
+      detailsButton.append(icon, label);
       detailsButton.addEventListener('click', showImportInspector);
-      importStatus.appendChild(detailsButton);
+      header.appendChild(detailsButton);
     }
   }
 

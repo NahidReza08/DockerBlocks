@@ -381,6 +381,17 @@ try {
   assert.equal(/\.validation-panel-content\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(html), false, 'Validation scroll body avoids overlapping positioning');
   assert.equal(/\.import-status\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(html), false, 'Import status remains in normal document flow');
   assert.equal(/#errorOutput[\s\S]*overflow:\s*visible/.test(html), true, 'Validation cards remain normal-flow content inside the scroll body');
+  assert.ok(html.includes('.import-status-header'), 'Import status uses a header row for right-aligned actions');
+  assert.ok(
+    html.includes('.import-details-button') &&
+      html.includes('margin-left: auto') &&
+      html.includes('justify-content: flex-end') &&
+      html.includes('text-align: right'),
+    'Import details action is lightweight and right-aligned'
+  );
+  assert.ok(html.includes('max-height: min(90vh, 900px)'), 'Inspector modal is viewport bounded');
+  assert.ok(/#importInspectorBody\s*\{[^}]*overflow-y:\s*auto/.test(html), 'Inspector body owns the shared vertical scrollbar');
+  assert.equal(/\.import-code-view,[\s\S]*overflow-y:\s*visible/.test(html), true, 'Inspector panes do not create separate vertical scrollbars');
   assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "CONFIG"'), 'Generated Service uses dynamic CONFIG chain');
   assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "ELEMENTS"'), 'Generated Compose uses dynamic ELEMENTS chain');
 

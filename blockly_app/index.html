@@ -541,6 +541,8 @@
       .import-status {
         margin: 0;
         padding: 10px 12px;
+        display: grid;
+        gap: 6px;
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--panel-soft);
@@ -559,6 +561,14 @@
       .import-status.error {
         border-color: var(--error-border);
         background: var(--error-bg);
+      }
+
+      .import-status-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px 12px;
+        flex-wrap: wrap;
       }
 
       .import-status-title {
@@ -585,6 +595,34 @@
       .import-status ul {
         margin: 4px 0 0;
         padding-left: 18px;
+      }
+
+      .import-details-button {
+        min-height: 28px;
+        margin-left: auto;
+        padding: 5px 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--blue-hover);
+        font-size: 12px;
+        font-weight: 700;
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      .import-details-button:hover {
+        background: #f1f5f9;
+        text-decoration: underline;
+      }
+
+      .import-details-button:focus-visible {
+        outline: 3px solid rgba(37, 99, 235, 0.24);
+        outline-offset: 2px;
       }
 
       .modal-backdrop {
@@ -667,11 +705,13 @@
 
       .import-inspector {
         width: min(1120px, 100%);
+        max-height: min(90vh, 900px);
       }
 
       .import-inspector #importInspectorBody {
         flex: 1 1 auto;
-        overflow: hidden;
+        overflow-y: auto;
+        overflow-x: hidden;
       }
 
       .import-inspector .import-dialog-header {
@@ -692,6 +732,7 @@
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 12px;
+        align-items: start;
       }
 
       .import-inspector-pane {
@@ -701,7 +742,7 @@
         flex-direction: column;
         border: 1px solid var(--border);
         border-radius: var(--radius);
-        overflow: hidden;
+        overflow: visible;
         background: #ffffff;
       }
 
@@ -717,11 +758,11 @@
 
       .import-code-view,
       .import-generated-code {
-        flex: 1 1 auto;
         min-height: 0;
         margin: 0;
         padding: 8px 0;
-        overflow: auto;
+        overflow-x: auto;
+        overflow-y: visible;
         font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
         font-size: 12px;
         line-height: 1.55;
@@ -729,7 +770,6 @@
       }
 
       .import-generated-code {
-        flex: 1;
         padding: 10px 12px;
         color: var(--text);
       }
