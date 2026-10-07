@@ -27,7 +27,8 @@ export type DockerComposeImportLineStatus =
   | 'imported'
   | 'partial'
   | 'unsupported'
-  | 'ignored';
+  | 'ignored'
+  | 'invalid';
 
 export type DockerComposeImportLineReport = {
   line: number;
@@ -157,19 +158,58 @@ function addInput(
   if (first) inputs[name] = { block: first };
 }
 
+function lineIndent(line: string): number {
+  return line.match(/^\s*/)?.[0].length ?? 0;
+}
+
+function lineOfIndexedPath(lines: string[], path: string): number | undefined {
+  const match = path.match(/^(.*)\[(\d+)\]$/);
+  if (!match) return undefined;
+
+  const parentLine = lineOfPath(lines.join('\n'), match[1]);
+  if (!parentLine) return undefined;
+
+  const parentIndent = lineIndent(lines[parentLine - 1]);
+  const wantedIndex = Number(match[2]);
+  let seenIndex = -1;
+
+  for (let index = parentLine; index < lines.length; index += 1) {
+    const text = lines[index];
+    const trimmed = text.trim();
+    const indent = lineIndent(text);
+
+    if (trimmed.length === 0 || trimmed.startsWith('#')) continue;
+    if (indent <= parentIndent) break;
+
+    if (/^-\s+/.test(trimmed)) {
+      seenIndex += 1;
+      if (seenIndex === wantedIndex) return index + 1;
+    }
+  }
+
+  return undefined;
+}
+
 function lineOfPath(yamlText: string, path: string): number | undefined {
+  const lines = yamlText.split(/\r?\n/);
+  const indexedLine = lineOfIndexedPath(lines, path);
+  if (indexedLine) return indexedLine;
+
   const parts = path
     .replace(/^\$\.?/, '')
     .split('.')
     .filter(Boolean);
   if (parts.length === 0) return undefined;
 
-  const lines = yamlText.split(/\r?\n/);
   const key = parts.at(-1)?.replace(/\[\d+\]$/, '');
   if (!key) return undefined;
 
   const pattern = new RegExp(`^\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`);
-  const index = lines.findIndex((line) => pattern.test(line));
+  const requiresTopLevel = path.startsWith('$.') && parts.length === 1;
+  const index = lines.findIndex((line) =>
+    pattern.test(line) &&
+    (!requiresTopLevel || lineIndent(line) === 0)
+  );
 
   return index >= 0 ? index + 1 : undefined;
 }
@@ -187,10 +227,11 @@ function withIssueLocations(
 function buildImportReport(
   yamlText: string,
   warnings: DockerComposeImportIssue[],
-  unsupportedFields: DockerComposeImportIssue[]
+  unsupportedFields: DockerComposeImportIssue[],
+  errors: DockerComposeImportIssue[] = []
 ): DockerComposeImportReport {
   const issueByLine = new Map<number, DockerComposeImportIssue[]>();
-  [...warnings, ...unsupportedFields].forEach((item) => {
+  [...warnings, ...unsupportedFields, ...errors].forEach((item) => {
     if (!item.line) return;
     const items = issueByLine.get(item.line) ?? [];
     items.push(item);
@@ -199,10 +240,25 @@ function buildImportReport(
 
   return {
     sourceYaml: yamlText,
-    lines: yamlText.split(/\r?\n/).map((text, index) => {
+    lines: yamlText.split(/\r?\n/).map((text, index, lines) => {
       const line = index + 1;
       const trimmed = text.trim();
       const lineIssues = issueByLine.get(line) ?? [];
+      const indent = lineIndent(text);
+      const parentUnsupportedTopLevel = lines
+        .slice(0, index)
+        .map((candidate, candidateIndex) => ({
+          text: candidate,
+          index: candidateIndex,
+          indent: lineIndent(candidate),
+          trimmed: candidate.trim()
+        }))
+        .reverse()
+        .find((candidate) =>
+          candidate.trimmed.length > 0 &&
+          !candidate.trimmed.startsWith('#') &&
+          candidate.indent < indent
+        );
 
       if (trimmed.length === 0) {
         return { line, text, status: 'ignored', reason: 'Blank line' };
@@ -213,10 +269,18 @@ function buildImportReport(
       }
 
       if (/^version\s*:/.test(trimmed) || /^name\s*:/.test(trimmed)) {
-        return { line, text, status: 'ignored', reason: 'Ignored Compose metadata' };
+        return { line, text, status: 'ignored', reason: 'Compose metadata is not required by the current Docker-Blocks model.' };
+      }
+
+      if (lineIssues.some((item) => errors.includes(item))) {
+        return { line, text, status: 'invalid', reason: lineIssues[0].message };
       }
 
       if (lineIssues.some((item) => item.message.includes('object syntax'))) {
+        return { line, text, status: 'partial', reason: lineIssues[0].message };
+      }
+
+      if (lineIssues.some((item) => item.message.includes('was imported') && item.message.includes('not supported'))) {
         return { line, text, status: 'partial', reason: lineIssues[0].message };
       }
 
@@ -226,6 +290,12 @@ function buildImportReport(
 
       if (/^(volumes|secrets|configs)\s*:/.test(trimmed) && !text.startsWith('    ')) {
         return { line, text, status: 'unsupported', reason: 'Top-level resource is not supported by Docker-Blocks.' };
+      }
+
+      if (parentUnsupportedTopLevel &&
+        parentUnsupportedTopLevel.indent === 0 &&
+        /^(volumes|secrets|configs)\s*:/.test(parentUnsupportedTopLevel.trimmed)) {
+        return { line, text, status: 'unsupported', reason: 'Child of unsupported top-level resource.' };
       }
 
       return { line, text, status: 'imported', reason: 'Imported' };
@@ -406,7 +476,17 @@ function normalizeStringList(
   }
 
   if (isRecord(value)) {
-    unsupportedFields.push(issue(path, `${path} object syntax is not fully supported; importing names only`));
+    warnings.push(issue(path, `${path} object syntax is not fully supported; importing names only`));
+    Object.entries(value).forEach(([name, entry]) => {
+      if (!isRecord(entry)) return;
+
+      Object.keys(entry).forEach((key) => {
+        warnings.push(issue(
+          `${path}.${name}.${key}`,
+          `${label} name "${name}" was imported, but ${key} is not supported.`
+        ));
+      });
+    });
     return Object.keys(value);
   }
 
@@ -534,7 +614,7 @@ function normalizeService(
     service.dependencies = normalizeStringList(
       value.depends_on,
       `${path}.depends_on`,
-      'depends_on',
+      'Dependency',
       warnings,
       unsupportedFields
     );
@@ -544,7 +624,7 @@ function normalizeService(
     service.networks = normalizeStringList(
       value.networks,
       `${path}.networks`,
-      'networks',
+      'Network',
       warnings,
       unsupportedFields
     );
@@ -766,7 +846,7 @@ export function importDockerComposeYaml(yamlText: string): DockerComposeImportRe
       warnings: [],
       unsupportedFields: [],
       errors: parsed.errors,
-      report: buildImportReport(yamlText, [], [])
+      report: buildImportReport(yamlText, [], [], parsed.errors)
     };
   }
 
@@ -780,7 +860,7 @@ export function importDockerComposeYaml(yamlText: string): DockerComposeImportRe
       warnings: [],
       unsupportedFields: [],
       errors: normalized.errors,
-      report: buildImportReport(yamlText, [], [])
+      report: buildImportReport(yamlText, [], [], normalized.errors)
     };
   }
   const warnings = withIssueLocations(yamlText, normalized.model.warnings);

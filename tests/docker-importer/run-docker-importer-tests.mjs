@@ -148,7 +148,9 @@ networks:
     assert.equal(reportByLine.get(7).status, 'unsupported');
     assert.equal(reportByLine.get(8).status, 'unsupported');
     assert.equal(reportByLine.get(12).status, 'partial');
+    assert.equal(reportByLine.get(14).status, 'partial');
     assert.equal(reportByLine.get(20).status, 'unsupported');
+    assert.equal(reportByLine.get(21).status, 'unsupported');
     assert.equal(findBlock(workspace, 'dependency').getFieldValue('TARGET'), 'db');
     assert.equal(findBlock(workspace, 'volume', 'SOURCE', '.').getFieldValue('TARGET'), '/usr/src/app');
     assert.equal(findBlock(workspace, 'volume', 'SOURCE', 'pgdata').getFieldValue('TARGET'), '/var/lib/postgresql/data');
@@ -452,9 +454,13 @@ networks:
     internal: true
 `);
     assert.deepEqual(unsupportedPaths(result), [
-      'services.web.depends_on',
-      'services.web.networks',
       'networks.backend.internal'
+    ]);
+    assert.deepEqual(warningPaths(result), [
+      'services.web.depends_on',
+      'services.web.depends_on.db.condition',
+      'services.web.networks',
+      'services.web.networks.backend.aliases'
     ]);
     assert.equal(findBlock(workspace, 'dependency').getFieldValue('TARGET'), 'db');
     assert.equal(findBlock(workspace, 'networkref').getFieldValue('TARGET'), 'backend');

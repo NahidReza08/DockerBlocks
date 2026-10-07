@@ -39,7 +39,13 @@ function element() {
       values: new Set(),
       add(...names) { names.forEach(name => this.values.add(name)); },
       remove(...names) { names.forEach(name => this.values.delete(name)); },
-      contains(name) { return this.values.has(name); }
+      contains(name) { return this.values.has(name); },
+      toggle(name, force) {
+        const shouldAdd = force ?? !this.values.has(name);
+        if (shouldAdd) this.values.add(name);
+        else this.values.delete(name);
+        return shouldAdd;
+      }
     },
     appendChild(child) { this.children.push(child); return child; },
     append(...children) { children.forEach(child => this.appendChild(child)); },
@@ -51,7 +57,7 @@ function element() {
     getAttribute(name) { return this.attributes[name] ?? null; },
     getBoundingClientRect() { return this.rect ?? { left: 0, top: 0, right: 1000, bottom: 600, width: 1000, height: 600 }; },
     cloneNode() { const clone = element(); clone.dataset = { ...this.dataset }; clone.textContent = this.textContent; return clone; },
-    click() { this.clicked = true; this.listeners.click?.({ preventDefault() {}, stopPropagation() {}, target: this }); },
+    click() { this.clicked = true; this.listeners.click?.({ preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {}, target: this }); },
     focus() { this.focused = true; },
     remove() { this.removed = true; },
     closest() { return null; }
@@ -167,6 +173,7 @@ try {
   execute(read('blockly_app/src/validation-ui.ts'), context);
   execute(read('blockly_app/src/docker-example.ts'), context);
   executeScoped(read('blockly_app/src/docker-compose-importer.ts'), context, ['importDockerComposeYaml']);
+  execute(read('blockly_app/src/import-inspector.ts'), context);
   execute(read('blockly_app/src/app-bootstrap.ts'), context);
   execute(read('blockly_app/src/blocks.ts'), context);
   execute(read('blockly_app/src/generator.ts'), context);
@@ -176,6 +183,7 @@ try {
   assert.deepEqual(elements.exampleSelect.children.map(option => option.textContent), ['Full Compose', 'Service', 'Network']);
   assert.equal(elements.codeOutput.textContent, '');
   assert.match(textContentDeep(elements.errorOutput), /No configuration yet/);
+  assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
 
   click('loadExample');
   assert.equal(elements.actionStatus.textContent, 'Full Compose loaded.');
@@ -186,6 +194,7 @@ try {
   const yamlAfterFullExample = elements.codeOutput.textContent;
 
   elements.exampleSelect.value = 'service';
+  assert.equal(elements.summaryServices.textContent, '2', 'Changing example selection alone does not load');
   click('loadExample');
   assert.equal(elements.summaryServices.textContent, '3', 'Service example adds without clearing');
   assert.ok(elements.codeOutput.textContent.length > yamlAfterFullExample.length);
@@ -194,17 +203,23 @@ try {
   assert.equal(elements.summaryNetworks.textContent, '2', 'Network example adds without clearing');
 
   click('openImportYaml');
-  elements.importYamlText.value = [
+  const importedYaml = [
     "version: '3.8'",
     '# Database Service',
     'services:',
     '  web:',
     '    image: nginx:latest',
     '    command: npm start',
+    '    depends_on:',
+    '      db:',
+    '        condition: service_healthy',
     '    ports:',
     '      - "8080:80"',
+    '  db:',
+    '    image: postgres:16',
     ''
   ].join('\n');
+  elements.importYamlText.value = importedYaml;
   click('importYamlSubmit');
   assert.equal(elements.importDialog.hidden, true);
   assert.match(textContentDeep(elements.importStatus), /YAML imported with warnings/);
@@ -212,9 +227,18 @@ try {
   assert.equal(validationMessages().length, 0, 'Unsupported fields stay out of normal validation');
   click('openImportInspector');
   assert.equal(elements.importInspectorDialog.hidden, false);
-  assert.match(textContentDeep(elements.importInspectorSummary), /imported/);
-  assert.match(textContentDeep(elements.importInspectorBody), /Unsupported \/ skipped/);
-  assert.match(textContentDeep(elements.importInspectorBody), /Ignored Compose metadata/);
+  assert.match(textContentDeep(elements.importInspectorSummary), /Imported YAML/);
+  assert.match(textContentDeep(elements.importInspectorSummary), /partial/);
+  assert.match(textContentDeep(elements.importInspectorBody), /My Imported YAML/);
+  assert.match(textContentDeep(elements.importInspectorBody), /Generated \/ Preserved YAML/);
+  assert.match(textContentDeep(elements.importInspectorBody), /version: '3.8'/);
+  assert.match(textContentDeep(elements.importInspectorBody), /command: npm start/);
+  assert.match(textContentDeep(elements.importInspectorBody), /condition: service_healthy/);
+  assert.match(textContentDeep(elements.importInspectorBody), /services:\n  web:\n    image: nginx:latest/);
+  const infoButtons = elements.importInspectorBody.children[0].children[0].children[1].children
+    .flatMap(row => row.children.filter?.(child => child.className === 'import-code-info') ?? []);
+  assert.ok(infoButtons.some(button => /metadata/.test(button.title)), 'Inspector info buttons expose ignored metadata reason');
+  assert.ok(infoButtons.some(button => /not supported/.test(button.title)), 'Inspector info buttons expose unsupported or partial reason');
   click('closeImportInspector');
 
   const beforeMalformed = elements.codeOutput.textContent;
@@ -237,9 +261,40 @@ try {
   click('clearWorkspace');
   assert.equal(elements.importStatus.hidden, true);
   assert.equal(elements.codeOutput.textContent, '');
+  assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
   click('openImportInspector');
   assert.match(textContentDeep(elements.importInspectorSummary), /No imported YAML/);
   click('closeImportInspector');
+
+  const trashTarget = element();
+  trashTarget.closest = selector => selector === '.blocklyTrash' ? trashTarget : null;
+  elements.blocklyDiv.listeners.pointerup({
+    target: trashTarget,
+    preventDefault() { this.defaultPrevented = true; },
+    stopPropagation() { this.stopped = true; },
+    stopImmediatePropagation() { this.immediateStopped = true; }
+  });
+  assert.equal(elements.clearWorkspaceDialog.hidden, true, 'Empty workspace trash click does nothing');
+
+  click('loadExample');
+  elements.blocklyDiv.listeners.pointerup({
+    target: trashTarget,
+    preventDefault() { this.defaultPrevented = true; },
+    stopPropagation() { this.stopped = true; },
+    stopImmediatePropagation() { this.immediateStopped = true; }
+  });
+  assert.equal(elements.clearWorkspaceDialog.hidden, false, 'Trash click opens only confirmation modal');
+  click('cancelTrashClear');
+  assert.equal(elements.clearWorkspaceDialog.hidden, true);
+  assert.equal(elements.summaryServices.textContent, '2', 'Cancel preserves workspace');
+  elements.blocklyDiv.listeners.pointerup({
+    target: trashTarget,
+    preventDefault() {},
+    stopPropagation() {},
+    stopImmediatePropagation() {}
+  });
+  click('confirmTrashClear');
+  assert.equal(elements.codeOutput.textContent, '', 'Confirm clears workspace');
 
   await click('copyYaml');
   assert.equal(copied, '');
@@ -255,7 +310,12 @@ try {
   }
   assert.equal((html.match(/data-resizer=/g) ?? []).length, 4, 'Four layout resizers are present');
   assert.equal((html.match(/data-block-type=/g) ?? []).length, 12, 'Palette exposes every supported block action');
+  assert.ok(html.includes('class="example-loader"'), 'Example select and load button are merged into one control');
   assert.equal(html.includes('Example</span>'), false, 'Toolbar no longer has redundant Example label text');
+  assert.ok(html.includes('docker-blocks-icon.svg'), 'Header/browser branding uses the Docker-Blocks icon');
+  assert.ok(html.includes('icon-hierarchy') && html.includes('icon-sliders') && html.includes('icon-collection'), 'Toolbox category icons are distinct');
+  assert.ok(read('blockly_app/src/app-bootstrap.ts').includes('maxTrashcanContents: 0'), 'Blockly trash history flyout is disabled');
+  assert.ok(html.includes('validation-panel-content') && html.includes('overflow-y: auto'), 'Validation body owns the scroll container');
   assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "CONFIG"'), 'Generated Service uses dynamic CONFIG chain');
   assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "ELEMENTS"'), 'Generated Compose uses dynamic ELEMENTS chain');
 

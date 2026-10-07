@@ -11,6 +11,7 @@ import {
   type DockerComposeImportResult
 } from './docker-compose-importer';
 import { collectDockerValidationErrors } from './docker-validation';
+import { renderImportInspector } from './import-inspector';
 import { createValidationUi } from './validation-ui';
 
 type WorkspaceGenerator = {
@@ -57,7 +58,8 @@ export function bootstrapBlocklyApp({
       minScale: 0.45,
       scaleSpeed: 1.08
     },
-    trashcan: true
+    trashcan: true,
+    maxTrashcanContents: 0
   });
   const codeOutput = document.getElementById('codeOutput');
   const lineNumbers = document.getElementById('lineNumbers');
@@ -184,6 +186,13 @@ export function bootstrapBlocklyApp({
     }
   }
 
+  function updateTrashState() {
+    blocklyDiv?.classList.toggle(
+      'workspace-empty',
+      workspace.getAllBlocks(false).length === 0
+    );
+  }
+
   function getDropWorkspaceCoordinate(position?: PaletteDropPosition) {
     if (!position) return { x: 48, y: 48 + workspace.getAllBlocks(false).length * 12 };
 
@@ -268,6 +277,7 @@ export function bootstrapBlocklyApp({
     validationUi.refresh(errors);
     updateYamlStatus(state);
     updateWorkspaceSummary();
+    updateTrashState();
     resizeWorkspace();
   }
 
@@ -331,71 +341,15 @@ export function bootstrapBlocklyApp({
     lastImportReport = null;
   }
 
-  function summarizeImportReport(report: DockerComposeImportReport) {
-    const counts = {
-      imported: 0,
-      partial: 0,
-      unsupported: 0,
-      ignored: 0
-    };
-
-    report.lines.forEach((line) => {
-      counts[line.status] += 1;
-    });
-
-    return counts.imported + ' lines imported, ' +
-      counts.partial + ' partial, ' +
-      counts.unsupported + ' skipped, ' +
-      counts.ignored + ' comments/ignored';
-  }
-
-  function statusLabel(status: string) {
-    if (status === 'imported') return 'Imported';
-    if (status === 'partial') return 'Partial / normalized';
-    if (status === 'unsupported') return 'Unsupported / skipped';
-    return 'Comment / blank / ignored';
-  }
-
   function showImportInspector() {
     if (!importInspectorDialog || !importInspectorBody || !importInspectorSummary) return;
 
-    importInspectorBody.replaceChildren();
-
-    if (!lastImportReport) {
-      importInspectorSummary.textContent = 'No imported YAML is available.';
-      importInspectorDialog.removeAttribute('hidden');
-      return;
-    }
-
-    importInspectorSummary.textContent = summarizeImportReport(lastImportReport);
-    const table = document.createElement('table');
-    table.className = 'import-line-table';
-
-    lastImportReport.lines.forEach((line) => {
-      const row = document.createElement('tr');
-      row.className = 'import-line ' + line.status;
-
-      const numberCell = document.createElement('td');
-      numberCell.className = 'import-line-number';
-      numberCell.textContent = String(line.line);
-
-      const codeCell = document.createElement('td');
-      codeCell.className = 'import-line-code';
-      codeCell.textContent = line.text || ' ';
-
-      const statusCell = document.createElement('td');
-      statusCell.className = 'import-line-status';
-      statusCell.textContent = statusLabel(line.status);
-
-      const reasonCell = document.createElement('td');
-      reasonCell.className = 'import-line-reason';
-      reasonCell.textContent = line.reason;
-
-      row.append(numberCell, codeCell, statusCell, reasonCell);
-      table.appendChild(row);
+    renderImportInspector({
+      report: lastImportReport,
+      generatedYaml: generator.workspaceToCode(workspace),
+      summaryElement: importInspectorSummary,
+      bodyElement: importInspectorBody
     });
-
-    importInspectorBody.appendChild(table);
     importInspectorDialog.removeAttribute('hidden');
   }
 
@@ -441,6 +395,11 @@ export function bootstrapBlocklyApp({
   function confirmTrashClearWorkspace() {
     hideClearWorkspaceDialog();
     clearWorkspace();
+  }
+
+  function workspaceIsDragging() {
+    return typeof (workspace as Blockly.WorkspaceSvg).isDragging === 'function' &&
+      (workspace as Blockly.WorkspaceSvg).isDragging();
   }
 
   function loadExample() {
@@ -626,12 +585,20 @@ export function bootstrapBlocklyApp({
     });
   }
 
-  function interceptTrashClick(event: MouseEvent) {
+  function interceptTrashClick(event: MouseEvent | PointerEvent) {
     const target = event.target as Element | null;
     if (!target?.closest?.('.blocklyTrash')) return;
+    if (workspaceIsDragging()) return;
 
     event.preventDefault();
     event.stopPropagation();
+    if ('stopImmediatePropagation' in event) event.stopImmediatePropagation();
+
+    if (workspace.getAllBlocks(false).length === 0) {
+      hideClearWorkspaceDialog();
+      return;
+    }
+
     showClearWorkspaceDialog();
   }
 
@@ -653,6 +620,7 @@ export function bootstrapBlocklyApp({
   document.getElementById('clearWorkspace')?.addEventListener('click', clearWorkspace);
   document.getElementById('copyYaml')?.addEventListener('click', copyYaml);
   document.getElementById('downloadYaml')?.addEventListener('click', downloadYaml);
+  blocklyDiv?.addEventListener('pointerup', interceptTrashClick, true);
   blocklyDiv?.addEventListener('click', interceptTrashClick, true);
   setupResizablePanels();
 

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="./logo_se.png" />
+    <link rel="icon" type="image/svg+xml" href="./docker-blocks-icon.svg" />
     <title>Docker-Blocks | Visual Docker Compose Generator</title>
     <style>
       :root {
@@ -152,21 +152,37 @@
         justify-content: flex-end;
       }
 
-      .example-picker {
+      .example-loader {
         height: 36px;
         display: inline-flex;
         align-items: center;
-        padding: 0 10px;
         border: 1px solid var(--border);
         border-radius: var(--button-radius);
         background: var(--panel);
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+
+      .example-loader .action-button {
+        height: 34px;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .example-picker {
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 8px;
+        border-left: 1px solid #bfdbfe;
+        background: #eff6ff;
         color: var(--text);
         font-size: 13px;
         font-weight: 600;
       }
 
       .example-picker select {
-        min-width: 180px;
+        min-width: 150px;
         border: 0;
         background: transparent;
         color: var(--text);
@@ -523,7 +539,7 @@
       #actionStatus:empty { display: none; }
 
       .import-status {
-        margin: 0 12px 12px;
+        margin: 0;
         padding: 10px 12px;
         border: 1px solid var(--border);
         border-radius: var(--radius);
@@ -650,53 +666,136 @@
       }
 
       .import-inspector {
-        width: min(960px, 100%);
+        width: min(1120px, 100%);
       }
 
-      .import-line-table {
-        width: 100%;
-        border-collapse: collapse;
+      .import-inspector #importInspectorBody {
+        flex: 1 1 auto;
+        overflow: hidden;
+      }
+
+      .import-inspector .import-dialog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .import-inspector-heading {
+        min-width: 0;
+        display: grid;
+        gap: 4px;
+      }
+
+      .import-inspector-split {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px;
+      }
+
+      .import-inspector-pane {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: #ffffff;
+      }
+
+      .import-inspector-pane h3 {
+        margin: 0;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+        background: var(--panel-soft);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .import-code-view,
+      .import-generated-code {
+        flex: 1 1 auto;
+        min-height: 0;
+        margin: 0;
+        padding: 8px 0;
+        overflow: auto;
         font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
         font-size: 12px;
+        line-height: 1.55;
+        white-space: pre;
       }
 
-      .import-line-table td {
-        padding: 4px 8px;
-        border-bottom: 1px solid #edf2f7;
-        vertical-align: top;
+      .import-generated-code {
+        flex: 1;
+        padding: 10px 12px;
+        color: var(--text);
       }
 
-      .import-line-number {
-        width: 42px;
+      .import-code-line {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr) 30px;
+        align-items: start;
+        min-width: max-content;
+        border-left: 3px solid transparent;
+      }
+
+      .import-code-number {
+        padding: 0 8px;
         color: var(--disabled);
         text-align: right;
         user-select: none;
       }
 
-      .import-line-code {
-        white-space: pre-wrap;
+      .import-code-text {
+        min-width: 0;
         color: var(--text);
       }
 
-      .import-line-status {
-        width: 190px;
-        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-        font-size: 11.5px;
+      .import-code-info {
+        width: 22px;
+        height: 22px;
+        margin: 1px 6px 0 2px;
+        padding: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
         font-weight: 700;
       }
 
-      .import-line-reason {
-        width: 260px;
-        color: var(--muted);
-        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-        font-size: 11.5px;
+      .import-code-info:hover,
+      .import-code-info:focus-visible {
+        color: var(--blue);
+        background: #eff6ff;
       }
 
-      .import-line.imported .import-line-status { color: var(--success); }
-      .import-line.partial .import-line-status { color: var(--warning); }
-      .import-line.unsupported .import-line-status { color: var(--error); }
-      .import-line.ignored .import-line-status,
-      .import-line.ignored .import-line-code { color: var(--disabled); }
+      .import-code-line.imported {
+        border-left-color: #60a5fa;
+        background: rgba(239, 246, 255, 0.72);
+      }
+
+      .import-code-line.partial {
+        border-left-color: var(--warning);
+        background: rgba(255, 247, 237, 0.76);
+      }
+
+      .import-code-line.unsupported,
+      .import-code-line.invalid {
+        border-left-color: var(--error);
+        background: rgba(254, 242, 242, 0.72);
+      }
+
+      .import-code-line.ignored {
+        border-left-color: #cbd5e1;
+        background: rgba(248, 250, 252, 0.86);
+      }
+
+      .import-code-line.ignored .import-code-text {
+        color: var(--disabled);
+      }
 
       .bottom-grid {
         display: grid;
@@ -707,17 +806,18 @@
 
       #errorOutput {
         min-height: 0;
-        padding: 12px;
         display: grid;
         gap: 8px;
-        overflow-y: auto;
+        overflow: visible;
       }
 
       .validation-panel-content {
         min-height: 0;
         display: flex;
         flex-direction: column;
-        overflow: hidden;
+        gap: 8px;
+        padding: 12px;
+        overflow-y: auto;
       }
 
       .validation-check, .validation-empty-state {
@@ -896,9 +996,14 @@
         opacity: 0.82;
       }
 
+      #blocklyDiv.workspace-empty .blocklyTrash {
+        opacity: 0.32;
+        cursor: default;
+      }
+
       @media (max-width: 1366px) {
         .app-shell { --toolbox-width: 210px; --yaml-width: 390px; --bottom-height: 170px; }
-        .example-picker select { min-width: 180px; }
+        .example-picker select { min-width: 130px; }
       }
 
       @media (max-width: 1100px) {
@@ -909,6 +1014,7 @@
         .resizer { display: none; }
         .yaml-panel { grid-column: 1 / -1; min-height: 360px; }
         .bottom-grid { grid-template-columns: 1fr; }
+        .import-inspector-split { grid-template-columns: 1fr; }
       }
     </style>
   </head>
@@ -918,6 +1024,10 @@
         <path class="icon-fill" d="M6 16h16v4a8 8 0 0 1-8 8h-2a10 10 0 0 1-10-10v-2h4Z" />
         <path class="icon-fill" d="M7 10h4v4H7zm5 0h4v4h-4zm5 0h4v4h-4zM12 5h4v4h-4zm11 9h4c0 2-1.5 4-4 4v-4Z" />
       </symbol>
+      <symbol id="icon-hierarchy" viewBox="0 0 24 24"><path d="M12 4v4"/><path d="M6 12v3"/><path d="M18 12v3"/><path d="M4 15h4v5H4z"/><path d="M10 3h4v5h-4z"/><path d="M16 15h4v5h-4z"/><path d="M6 12h12"/><path d="M12 8v4"/></symbol>
+      <symbol id="icon-stack" viewBox="0 0 24 24"><path d="M5 7h14v4H5z"/><path d="M5 13h14v4H5z"/><path d="M8 4h8"/><path d="M8 20h8"/></symbol>
+      <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 6h10"/><path d="M18 6h2"/><path d="M4 12h3"/><path d="M11 12h9"/><path d="M4 18h12"/><path d="M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+      <symbol id="icon-collection" viewBox="0 0 24 24"><path d="M5 5h6v6H5z"/><path d="M13 5h6v6h-6z"/><path d="M5 13h6v6H5z"/><path d="M13 13h6v6h-6z"/></symbol>
       <symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></symbol>
       <symbol id="icon-cube" viewBox="0 0 24 24"><path d="m12 2 8 4.5v9L12 20l-8-4.5v-9L12 2Z"/><path d="M12 11 4.5 6.8"/><path d="M12 11v8.5"/><path d="m12 11 7.5-4.2"/></symbol>
       <symbol id="icon-network" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="m8.5 7.5 2.5 7"/><path d="m15.5 7.5-2.5 7"/><path d="M9 6h6"/></symbol>
@@ -950,10 +1060,12 @@
           </div>
         </div>
         <div class="top-actions" role="group" aria-label="Workspace actions">
-          <label class="example-picker">
-            <select id="exampleSelect" aria-label="Choose example"></select>
-          </label>
-          <button id="loadExample" class="action-button primary" type="button"><svg><use href="#icon-folder"></use></svg>Load Example</button>
+          <div class="example-loader" role="group" aria-label="Load example">
+            <button id="loadExample" class="action-button primary" type="button"><svg><use href="#icon-folder"></use></svg>Load Example:</button>
+            <label class="example-picker">
+              <select id="exampleSelect" aria-label="Choose example"></select>
+            </label>
+          </div>
           <button id="openImportYaml" class="action-button import" type="button"><svg><use href="#icon-upload"></use></svg>Import YAML</button>
           <button id="validateWorkspace" class="action-button success" type="button"><svg><use href="#icon-check"></use></svg>Validate</button>
           <button id="clearWorkspace" class="action-button danger" type="button"><svg><use href="#icon-trash"></use></svg>Clear</button>
@@ -967,26 +1079,26 @@
           </div>
           <div class="palette">
             <section class="palette-group structure" aria-label="Structure blocks">
-              <div class="palette-group-header"><svg><use href="#icon-layers"></use></svg>Structure</div>
-              <button class="palette-item compose" type="button" data-block-type="compose"><svg><use href="#icon-layers"></use></svg><span>Compose</span></button>
+              <div class="palette-group-header"><svg><use href="#icon-hierarchy"></use></svg>Structure</div>
+              <button class="palette-item compose" type="button" data-block-type="compose"><svg><use href="#icon-stack"></use></svg><span>Compose</span></button>
               <button class="palette-item service" type="button" data-block-type="service"><svg><use href="#icon-cube"></use></svg><span>Service</span></button>
             </section>
 
             <section class="palette-group service-config" aria-label="Service Configuration blocks">
-              <div class="palette-group-header"><svg><use href="#icon-list"></use></svg>Service Configuration</div>
+              <div class="palette-group-header"><svg><use href="#icon-sliders"></use></svg>Service Configuration</div>
               <button class="palette-item image" type="button" data-block-type="image"><svg><use href="#icon-package"></use></svg><span>Image</span></button>
               <button class="palette-item build" type="button" data-block-type="build"><svg><use href="#icon-wrench"></use></svg><span>Build</span></button>
               <button class="palette-item port" type="button" data-block-type="port"><svg><use href="#icon-plug"></use></svg><span>Ports</span></button>
               <button class="palette-item environment" type="button" data-block-type="environment"><svg><use href="#icon-list"></use></svg><span>Environment</span></button>
               <button class="palette-item volume" type="button" data-block-type="volume"><svg><use href="#icon-database"></use></svg><span>Volumes</span></button>
               <button class="palette-item dependency" type="button" data-block-type="dependency"><svg><use href="#icon-link"></use></svg><span>Depends On</span></button>
-              <button class="palette-item networkref" type="button" data-block-type="networkref"><svg><use href="#icon-network"></use></svg><span>Networks</span></button>
+              <button class="palette-item networkref" type="button" data-block-type="networkref"><svg><use href="#icon-link"></use></svg><span>Networks</span></button>
               <button class="palette-item restart" type="button" data-block-type="restart"><svg><use href="#icon-refresh"></use></svg><span>Restart</span></button>
               <button class="palette-item healthcheck" type="button" data-block-type="healthcheck"><svg><use href="#icon-heart"></use></svg><span>Healthcheck</span></button>
             </section>
 
             <section class="palette-group resources" aria-label="Top-level Docker Compose resource blocks">
-              <div class="palette-group-header"><svg><use href="#icon-network"></use></svg>Resources</div>
+              <div class="palette-group-header"><svg><use href="#icon-collection"></use></svg>Resources</div>
               <button class="palette-item network" type="button" data-block-type="network"><svg><use href="#icon-network"></use></svg><span>Network</span></button>
             </section>
           </div>
@@ -1095,13 +1207,13 @@
     <div id="importInspectorDialog" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="importInspectorTitle">
       <section class="import-dialog import-inspector">
         <div class="import-dialog-header">
-          <h2 id="importInspectorTitle" class="import-dialog-title">Imported YAML Inspector</h2>
-          <div id="importInspectorSummary" class="import-status-message"></div>
-        </div>
-        <div id="importInspectorBody" class="import-dialog-body"></div>
-        <div class="import-dialog-actions">
+          <div class="import-inspector-heading">
+            <h2 id="importInspectorTitle" class="import-dialog-title">Imported YAML Inspector</h2>
+            <div id="importInspectorSummary" class="import-status-message"></div>
+          </div>
           <button id="closeImportInspector" class="secondary-button" type="button">Close</button>
         </div>
+        <div id="importInspectorBody" class="import-dialog-body"></div>
       </section>
     </div>
 
