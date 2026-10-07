@@ -482,7 +482,15 @@
         height: 15px;
       }
 
-      .yaml-button:hover { background: var(--blue-hover); }
+      .yaml-button:not(:disabled):hover { background: var(--blue-hover); }
+
+      .yaml-button:disabled,
+      .yaml-button[aria-disabled="true"] {
+        background: #e2e8f0;
+        color: #64748b;
+        cursor: not-allowed;
+        opacity: 0.72;
+      }
 
       .yaml-body {
         flex: 1;
@@ -1164,7 +1172,7 @@
             <div class="panel-title"><svg><use href="#icon-file"></use></svg>docker-compose.yml</div>
             <div class="yaml-header-actions">
               <div id="yamlStatus" class="status-pill neutral" aria-live="polite">Invalid</div>
-              <button id="openImportInspector" class="yaml-button" type="button" title="View YAML transformation details" aria-label="View YAML transformation details"><svg><use href="#icon-info"></use></svg></button>
+              <button id="openImportInspector" class="yaml-button" type="button" title="No YAML transformation details yet" aria-label="YAML transformation details unavailable" aria-disabled="true" disabled><svg><use href="#icon-info"></use></svg></button>
               <button id="editYaml" class="yaml-button" type="button" title="Edit YAML" aria-label="Edit YAML"><svg><use href="#icon-edit"></use></svg></button>
               <button id="copyYaml" class="yaml-button" type="button" title="Copy YAML" aria-label="Copy YAML"><svg><use href="#icon-copy"></use></svg></button>
               <button id="downloadYaml" class="yaml-button" type="button" title="Download YAML" aria-label="Download YAML"><svg><use href="#icon-download"></use></svg></button>

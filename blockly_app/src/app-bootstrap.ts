@@ -84,6 +84,7 @@ export function bootstrapBlocklyApp({
   const chooseYamlFileButton = document.getElementById('chooseYamlFile') as HTMLButtonElement | null;
   const importYamlSubmit = document.getElementById('importYamlSubmit') as HTMLButtonElement | null;
   const importStatus = document.getElementById('importStatus');
+  const importInspectorButton = document.getElementById('openImportInspector') as HTMLButtonElement | null;
   const importInspectorDialog = document.getElementById('importInspectorDialog');
   const importInspectorTitle = document.getElementById('importInspectorTitle');
   const importInspectorSummary = document.getElementById('importInspectorSummary');
@@ -304,6 +305,36 @@ export function bootstrapBlocklyApp({
     return sourceType === 'edit' ? 'YAML edit' : 'YAML import';
   }
 
+  function updateImportInspectorAction() {
+    if (!importInspectorButton) return;
+
+    const hasTransformationHistory = lastTransformation?.report !== null && lastTransformation?.report !== undefined;
+    importInspectorButton.disabled = !hasTransformationHistory;
+    importInspectorButton.setAttribute('aria-disabled', hasTransformationHistory ? 'false' : 'true');
+    importInspectorButton.setAttribute(
+      'title',
+      hasTransformationHistory ? 'View YAML transformation details' : 'No YAML transformation details yet'
+    );
+    importInspectorButton.setAttribute(
+      'aria-label',
+      hasTransformationHistory ? 'View YAML transformation details' : 'YAML transformation details unavailable'
+    );
+  }
+
+  function updateTransformationContext(
+    result: DockerComposeImportResult,
+    sourceType: YamlTransformationSource
+  ) {
+    lastTransformation = result.success && result.report
+      ? {
+          sourceType,
+          report: result.report,
+          generatedYaml: generator.workspaceToCode(workspace)
+        }
+      : null;
+    updateImportInspectorAction();
+  }
+
   function showTransformationStatus(
     result: DockerComposeImportResult,
     sourceType: YamlTransformationSource
@@ -372,21 +403,24 @@ export function bootstrapBlocklyApp({
   }
 
   function clearImportStatus() {
+    lastTransformation = null;
+    updateImportInspectorAction();
+
     if (!importStatus) return;
 
     importStatus.hidden = true;
     importStatus.replaceChildren();
     importStatus.classList.remove('success', 'warning', 'error');
-    lastTransformation = null;
   }
 
   function showImportInspector() {
     if (!importInspectorDialog || !importInspectorBody || !importInspectorSummary) return;
+    if (!lastTransformation?.report) return;
 
     renderImportInspector({
-      report: lastTransformation?.report ?? null,
-      generatedYaml: lastTransformation?.generatedYaml ?? generator.workspaceToCode(workspace),
-      sourceType: lastTransformation?.sourceType,
+      report: lastTransformation.report,
+      generatedYaml: lastTransformation.generatedYaml,
+      sourceType: lastTransformation.sourceType,
       titleElement: importInspectorTitle,
       summaryElement: importInspectorSummary,
       bodyElement: importInspectorBody
@@ -507,12 +541,7 @@ export function bootstrapBlocklyApp({
   function applyYamlText(yamlText: string, sourceType: YamlTransformationSource) {
     const result = importDockerComposeYaml(yamlText);
     showTransformationStatus(result, sourceType);
-
-    lastTransformation = {
-      sourceType,
-      report: result.report ?? null,
-      generatedYaml: generator.workspaceToCode(workspace)
-    };
+    updateTransformationContext(result, sourceType);
 
     if (!result.success || !result.workspaceState) {
       showActionStatus(sourceType === 'edit'
@@ -526,11 +555,7 @@ export function bootstrapBlocklyApp({
     (workspace as Blockly.WorkspaceSvg).scrollCenter?.();
     hideImportDialog();
     handleWorkspaceChange();
-    lastTransformation = {
-      sourceType,
-      report: result.report ?? null,
-      generatedYaml: generator.workspaceToCode(workspace)
-    };
+    updateTransformationContext(result, sourceType);
     showActionStatus(sourceType === 'edit' ? 'YAML edit applied.' : 'YAML imported.');
 
     return result;
@@ -711,6 +736,7 @@ export function bootstrapBlocklyApp({
   }
 
   populateExampleSelector();
+  updateImportInspectorAction();
   validationUi.refresh(collectValidationErrors());
   workspace.addChangeListener(handleWorkspaceChange);
 

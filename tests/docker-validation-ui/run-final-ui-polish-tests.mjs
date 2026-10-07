@@ -33,7 +33,7 @@ function executeScoped(source, context, expose) {
 
 function element() {
   const node = {
-    textContent: '', children: [], listeners: {}, className: '', hidden: false, value: '',
+    textContent: '', children: [], listeners: {}, className: '', hidden: false, disabled: false, value: '',
     title: '', attributes: {}, style: {}, dataset: {}, files: undefined,
     classList: {
       values: new Set(),
@@ -52,12 +52,16 @@ function element() {
     replaceChildren() { this.children = []; this.textContent = ''; },
     addEventListener(type, handler) { this.listeners[type] = handler; },
     removeEventListener(type) { delete this.listeners[type]; },
-    setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'hidden') this.hidden = true; if (name === 'title') this.title = String(value); },
-    removeAttribute(name) { delete this.attributes[name]; if (name === 'hidden') this.hidden = false; },
+    setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'hidden') this.hidden = true; if (name === 'disabled') this.disabled = true; if (name === 'title') this.title = String(value); },
+    removeAttribute(name) { delete this.attributes[name]; if (name === 'hidden') this.hidden = false; if (name === 'disabled') this.disabled = false; },
     getAttribute(name) { return this.attributes[name] ?? null; },
     getBoundingClientRect() { return this.rect ?? { left: 0, top: 0, right: 1000, bottom: 600, width: 1000, height: 600 }; },
     cloneNode() { const clone = element(); clone.dataset = { ...this.dataset }; clone.textContent = this.textContent; return clone; },
-    click() { this.clicked = true; this.listeners.click?.({ preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {}, target: this }); },
+    click() {
+      if (this.disabled) return;
+      this.clicked = true;
+      this.listeners.click?.({ preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {}, target: this });
+    },
     focus() { this.focused = true; },
     remove() { this.removed = true; },
     closest() { return null; }
@@ -84,6 +88,16 @@ function assertNoBlankImportStatus(label) {
 function assertVisibleImportStatus(label) {
   assert.equal(elements.importStatus.hidden, false, `${label}: import status is visible`);
   assert.notEqual(textContentDeep(elements.importStatus).trim(), '', `${label}: import status has meaningful content`);
+}
+
+function assertInspectorActionDisabled(label) {
+  assert.equal(elements.openImportInspector.disabled, true, `${label}: YAML info action is disabled`);
+  assert.equal(elements.openImportInspector.getAttribute('aria-disabled'), 'true', `${label}: YAML info action is aria-disabled`);
+}
+
+function assertInspectorActionEnabled(label) {
+  assert.equal(elements.openImportInspector.disabled, false, `${label}: YAML info action is enabled`);
+  assert.equal(elements.openImportInspector.getAttribute('aria-disabled'), 'false', `${label}: YAML info action is aria-enabled`);
 }
 
 const ids = [
@@ -198,10 +212,9 @@ try {
   assert.match(textContentDeep(elements.errorOutput), /No configuration yet/);
   assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
   assertNoBlankImportStatus('Empty workspace validation panel');
+  assertInspectorActionDisabled('Fresh app');
   click('openImportInspector');
-  assert.match(textContentDeep(elements.importInspectorSummary), /No YAML transformation history yet/);
-  assert.match(textContentDeep(elements.importInspectorBody), /Import YAML or edit the generated YAML/);
-  click('closeImportInspector');
+  assert.equal(elements.importInspectorDialog.hidden, true, 'Disabled YAML info action does not open the inspector');
 
   click('loadExample');
   assert.equal(elements.actionStatus.textContent, 'Full Compose loaded.');
@@ -210,6 +223,7 @@ try {
   assert.equal(elements.yamlStatus.textContent, 'Valid');
   assert.ok(elements.codeOutput.textContent.includes('healthcheck:'));
   assertNoBlankImportStatus('Valid Blockly validation panel');
+  assertInspectorActionDisabled('Manual Blockly workflow keeps YAML info action disabled');
   let yamlAfterFullExample = elements.codeOutput.textContent;
 
   workspace.clear();
@@ -233,6 +247,7 @@ try {
   assert.match(textContentDeep(elements.errorOutput), /requires an image or build configuration/);
   assert.equal(validationMessages().length, 1);
   assertNoBlankImportStatus('Invalid Blockly validation panel');
+  assertInspectorActionDisabled('Invalid Blockly workflow keeps YAML info action disabled');
 
   click('loadExample');
   assert.equal(elements.actionStatus.textContent, 'Full Compose loaded.');
@@ -264,6 +279,7 @@ try {
   assert.equal(elements.importDialog.hidden, true);
   assert.match(textContentDeep(elements.importStatus), /YAML edit applied with warnings/);
   assertVisibleImportStatus('YAML edit warning status');
+  assertInspectorActionEnabled('YAML edit enables header info action');
   assert.equal(elements.summaryServices.textContent, '1');
   assert.match(elements.codeOutput.textContent, /edited:/);
   assert.match(elements.codeOutput.textContent, /"8080:80"/);
@@ -283,6 +299,7 @@ try {
   assert.equal(elements.importDialog.hidden, false);
   assert.match(textContentDeep(elements.importStatus), /YAML edit failed/);
   assertVisibleImportStatus('YAML edit failure status');
+  assertInspectorActionDisabled('Malformed YAML edit clears header info action');
   click('importYamlCancel');
 
   elements.exampleSelect.value = 'service';
@@ -327,6 +344,7 @@ try {
   assert.match(textContentDeep(elements.importStatus), /YAML imported with warnings/);
   assert.match(textContentDeep(elements.importStatus), /unsupported\/partial/);
   assertVisibleImportStatus('YAML import warning status');
+  assertInspectorActionEnabled('YAML import enables header info action');
   assert.equal(validationMessages().length, 0, 'Unsupported fields stay out of normal validation');
   click('openImportInspector');
   assert.equal(elements.importInspectorDialog.hidden, false);
@@ -358,6 +376,7 @@ try {
   elements.importYamlFile.listeners.change();
   assert.equal(elements.summaryServices.textContent, '1', 'File import replaces workspace');
   assertVisibleImportStatus('YAML file import success status');
+  assertInspectorActionEnabled('YAML file import keeps header info action enabled');
 
   resizers[0].listeners.pointerdown({ preventDefault() {}, clientX: 200, clientY: 0 });
   documentListeners.pointermove({ clientX: 260, clientY: 0 });
@@ -367,11 +386,11 @@ try {
   click('clearWorkspace');
   assert.equal(elements.importStatus.hidden, true);
   assertNoBlankImportStatus('Cleared workspace validation panel');
+  assertInspectorActionDisabled('Clear resets header info action');
   assert.equal(elements.codeOutput.textContent, '');
   assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
   click('openImportInspector');
-  assert.match(textContentDeep(elements.importInspectorSummary), /No YAML transformation history/);
-  click('closeImportInspector');
+  assert.equal(elements.importInspectorDialog.hidden, true, 'Disabled YAML info action stays closed after clear');
 
   const trashTarget = element();
   trashTarget.closest = selector => selector === '.blocklyTrash' ? trashTarget : null;
@@ -423,6 +442,9 @@ try {
   assert.equal(html.includes('Example</span>'), false, 'Toolbar no longer has redundant Example label text');
   assert.ok(html.includes('docker-blocks-icon.svg'), 'Header/browser branding uses the Docker-Blocks icon');
   assert.ok(html.includes('icon-hierarchy') && html.includes('icon-sliders') && html.includes('icon-collection'), 'Toolbox category icons are distinct');
+  assert.ok(html.includes('id="openImportInspector"') && html.includes('aria-disabled="true"') && html.includes('disabled'), 'YAML info action starts disabled in static markup');
+  assert.ok(html.includes('.yaml-button:disabled') && html.includes('cursor: not-allowed'), 'Disabled YAML info action has muted disabled styling');
+  assert.ok(read('blockly_app/src/app-bootstrap.ts').includes('function updateImportInspectorAction'), 'Runtime controls YAML info action disabled state');
   assert.ok(read('blockly_app/src/app-bootstrap.ts').includes('maxTrashcanContents: 0'), 'Blockly trash history flyout is disabled');
   assert.ok(html.includes('validation-panel-content') && html.includes('overflow-y: auto'), 'Validation body owns the scroll container');
   assert.equal(/\.validation-panel-content\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(html), false, 'Validation scroll body avoids overlapping positioning');
