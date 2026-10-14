@@ -27,6 +27,11 @@ const context = vm.createContext({
 });
 
 execute(read('blockly_app/src/docker-yaml.ts'), context);
+execute(
+  read('blockly_app/src/docker-block-definitions.ts') +
+    '\nglobalThis.DOCKER_BLOCK_DEFINITIONS = DOCKER_BLOCK_DEFINITIONS;',
+  context
+);
 execute(read('blockly_app/src/blocks.ts'), context);
 execute(read('blockly_app/src/generator.ts') + '\nglobalThis.generator = generator;', context);
 execute(read('blockly_app/src/docker-compose-importer.ts'), context);

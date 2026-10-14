@@ -1,6 +1,7 @@
-# DockerBlocks final demo (S3-12)
+# DockerBlocks final demo
 
-Demonstrate the implemented Compose configuration vertical slice using D04.
+Demonstrate the maintained Docker Compose editor using the built-in examples
+and D04 YAML fixture.
 
 ## Prepare and verify
 
@@ -16,9 +17,9 @@ npm.cmd test
 npm.cmd run build
 ```
 
-The test command runs all five suites, including D04 YAML generation and
-validation UI integration. The build type-checks TypeScript and builds Vite into
-`blockly_app/dist`; leave that output for manual cleanup if needed.
+The test command runs the DockerBlocks regression suites, including YAML
+generation, reverse import, connection rules, and validation UI integration.
+The build type-checks TypeScript and builds Vite into `blockly_app/dist`.
 These checks do not replace the browser walkthrough below.
 
 Start the checked-in editor:
@@ -27,14 +28,13 @@ Start the checked-in editor:
 npm.cmd run dev
 ```
 
-Open the local URL printed by Vite. Do not run the README's grammar-generation
-example: it overwrites the checked-in editor. Stop the server with Ctrl+C after
-the demo. All three npm scripts above are defined in [package.json](package.json).
+Open the local URL printed by Vite. Stop the server with Ctrl+C after the demo.
+All three npm scripts above are defined in [package.json](package.json).
 
 ## Valid Blockly walkthrough
 
-1. Begin with an empty workspace and open the **Docker** toolbox category.
-   Drag one **compose** root into the workspace.
+1. Begin with an empty workspace and use the **Structure** toolbox group.
+   Drag one **Compose** root into the workspace.
 2. Attach a **Service** block inside the root's **Services** slot. Set
    **Name** to `frontend` and **Image** to `nginx`.
 3. Fill its matching slots with blocks from the toolbox:
@@ -50,9 +50,10 @@ the demo. All three npm scripts above are defined in [package.json](package.json
 6. Finish each field edit with Enter or by clicking outside the field. Enter
    values and paths without quotes. Temporary warnings while building are
    expected (new ports default to zero). Keep all blocks connected to the root.
-7. Show **Generated Code** updating to the YAML below. Point out the two services,
-   quoted port/volume mappings, and quoted numeric environment value. Confirm
-   **Console Errors** says `No errors detected.` and no block has a validation warning.
+7. Show **docker-compose.yml** updating to the YAML below. Point out the two
+   services, quoted port/volume mappings, and quoted numeric environment value.
+   Confirm **Validation Results** shows no errors and no block has a validation
+   warning.
 
 ```yaml
 services:
@@ -87,27 +88,30 @@ Then restore the value before moving to the next row.
 | Port host | `65536` | Host port must be an integer between 1 and 65535. | `8080` |
 | Environment key | `1INVALID` | Environment key must start with a letter or underscore and contain only letters, numbers, and underscores. | `NODE_ENV` |
 | Volume source | Clear the field | Volume source is required. | `./frontend` |
-| Service image | Clear the field | Image is required | `nginx` |
+| Service image | Clear the field | Service requires an image or build configuration. | `nginx` |
 
 After **each correction**, finish the edit and confirm the corresponding block
-warning and error entry disappear without reloading the page. The panel should
-return to `No errors detected.` and the YAML should match the valid example.
-Warnings do not prevent YAML generation; output alone is not evidence of validity.
+warning and error entry disappear without reloading the page. The validation
+panel should return to the valid state and the YAML should match the valid
+example. Warnings do not prevent YAML generation; output alone is not evidence
+of validity.
 
 ## D04 reference and supported scope
 
-Show the existing [D04 DSL](tests/docker-compose-examples/D04-valid-multi-service.dsl)
-and [D04 expected YAML](tests/docker-compose-examples/D04-valid-multi-service.yaml)
-beside the result. This walkthrough recreates that fixture manually; it is not a
-DSL import flow. The existing YAML suite parses D04 with the actual grammar,
-populates a test workspace, and compares generated output with the YAML fixture.
+Show the existing
+[D04 expected YAML](tests/docker-compose-examples/D04-valid-multi-service.yaml)
+beside the result. This walkthrough recreates that fixture manually. The YAML
+suite builds a Blockly workspace from the maintained block model and compares
+generated output with the expected Compose YAML.
 See the [D04 notes](tests/docker-compose-examples/README.md#multi-service-demo-d04).
 
 Scope: Compose root, multiple services, names/images, ports, environment entries,
-and short source-to-target volumes only. See the
+short source-to-target volumes, dependencies, top-level networks, restart,
+build, and healthcheck. See the
 [supported subset and limitations](README.md#supported-docker-compose-subset).
-This project is a browser-based Vite/TypeScript application and does not require
-a separate backend service. Automated tests verify the Docker block model,
-validation, connection rules, and YAML generation. Final browser layout,
-drag-and-drop interaction, block warning display, and live validation refresh
-must still be checked manually by the presenter using this walkthrough.
+This project is a browser-based Vite/TypeScript application and does not
+require a separate backend service. Automated tests verify the Docker block
+model, validation, connection rules, YAML generation, and YAML import/edit
+flow. Final browser layout, drag-and-drop interaction, block warning display,
+and live validation refresh must still be checked manually by the presenter
+using this walkthrough.

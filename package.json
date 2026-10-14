@@ -1,16 +1,15 @@
 {
-  "name": "langium-to-blockly",
+  "name": "docker-blocks",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:validation": "node ./tests/validation-regression/run-validation-regression-tests.mjs",
     "test:block-connections": "node ./tests/block-connection-rules/run-block-connection-rules-tests.mjs",
     "test:yaml-generation": "node ./tests/yaml-generation/run-yaml-generation-tests.mjs",
     "test:docker-regression": "node ./tests/docker-regression/run-docker-regression-tests.mjs",
     "test:docker-importer": "node ./tests/docker-importer/run-docker-importer-tests.mjs",
-    "test": "npm run test:validation && npm run test:block-connections && npm run test:yaml-generation && npm run test:docker-regression && npm run test:docker-validation-ui && npm run test:docker-importer",
+    "test": "npm run test:block-connections && npm run test:yaml-generation && npm run test:docker-regression && npm run test:docker-validation-ui && npm run test:docker-importer",
     "test:docker-validation-ui": "node ./tests/docker-validation-ui/run-docker-validation-ui-tests.mjs && node ./tests/docker-validation-ui/run-final-ui-polish-tests.mjs"
   },
   "devDependencies": {
@@ -20,7 +19,6 @@
     "yaml": "^2.9.1"
   },
   "dependencies": {
-    "blockly": "^12.5.1",
-    "langium": "^4.1.0"
+    "blockly": "^12.5.1"
   }
 }

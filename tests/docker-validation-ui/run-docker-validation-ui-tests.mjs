@@ -11,10 +11,9 @@ const mainTsFile = path.join(
   repoRoot,
   'blockly_app/src/main.ts'
 );
-
-const templateFile = path.join(
+const dockerBlockDefinitionsFile = path.join(
   repoRoot,
-  'generate_blockly/src/blockly-ts-target.js'
+  'blockly_app/src/docker-block-definitions.ts'
 );
 const dockerValidationFile = path.join(
   repoRoot,
@@ -138,7 +137,7 @@ function assertSharedValidationPipeline(appBootstrapSource, validationUiSource) 
   assert.match(
     appBootstrapSource,
     /\.\.\.validationErrors,\s*\.\.\.collectDockerValidationErrors\(workspace\)/,
-    'Bootstrap: grammar and Docker errors should enter the same validation state.'
+    'Bootstrap: static and Docker errors should enter the same validation state.'
   );
 
   assert.match(
@@ -164,12 +163,35 @@ console.log(
   '\nDocker Validation UI Integration Tests\n'
 );
 
-console.log('Testing generated Blockly application...');
+console.log('Testing maintained Blockly application...');
 
 assert.match(
   read(mainTsFile),
   /bootstrapBlocklyApp/,
-  'Generated main.ts should call the handwritten app bootstrap.'
+  'main.ts should call the handwritten app bootstrap.'
+);
+
+assert.match(
+  read(mainTsFile),
+  /DOCKER_TOOLBOX/,
+  'main.ts should use the centralized Docker toolbox definition.'
+);
+
+const dockerBlockDefinitions = read(dockerBlockDefinitionsFile);
+for (const blockType of [
+  'compose', 'service', 'image', 'build', 'restart', 'healthcheck',
+  'dependency', 'networkref', 'network', 'port', 'environment', 'volume'
+]) {
+  assert.ok(
+    dockerBlockDefinitions.includes(`"type": "${blockType}"`),
+    `Docker block definitions include ${blockType}.`
+  );
+}
+
+assert.match(
+  dockerBlockDefinitions,
+  /DOCKER_TOOLBOX/,
+  'Docker toolbox metadata should live with the maintained block definitions.'
 );
 
 assertDockerValidationRules(
@@ -186,16 +208,8 @@ console.log(
   '[PASS] Docker errors use the existing validation UI pipeline'
 );
 
-console.log('Testing generator template...');
-
-assert.match(
-  read(templateFile),
-  /bootstrapBlocklyApp/,
-  'Generator template should emit a bootstrap call instead of inline app logic.'
-);
-
 console.log(
-  '[PASS] Docker validation UI integration survives regeneration'
+  '[PASS] Docker validation UI integration uses maintained runtime modules'
 );
 
 console.log(

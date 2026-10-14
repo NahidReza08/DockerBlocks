@@ -1,20 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { fileURLToPath } from 'node:url';
 import * as Blockly from 'blockly';
 import { javascriptGenerator, Order } from 'blockly/javascript';
 import ts from 'typescript';
 import { parseDocument } from 'yaml';
-import { loadGrammar } from '../../generate_blockly/src/grammar-loader.js';
-import { buildIR } from '../../generate_blockly/src/ir-builder.js';
-import { generateMainTs } from '../../generate_blockly/src/blockly-ts-target.js';
 
 const root = new URL('../../', import.meta.url);
 const read = file => fs.readFileSync(new URL(file, root), 'utf8').replace(/\r\n/g, '\n');
 const main = read('blockly_app/src/main.ts');
-const grammar = await loadGrammar(fileURLToPath(new URL('generate_blockly/input/docker-compose.langium', root)));
-assert.equal(generateMainTs(buildIR(grammar)), main, 'Runtime main.ts matches regenerated template exactly');
 
 function execute(source, context) {
   const script = source.replace(/^import[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
@@ -202,6 +196,10 @@ try {
   executeScoped(read('blockly_app/src/docker-compose-importer.ts'), context, ['importDockerComposeYaml']);
   execute(read('blockly_app/src/import-inspector.ts'), context);
   execute(read('blockly_app/src/app-bootstrap.ts'), context);
+  executeScoped(read('blockly_app/src/docker-block-definitions.ts'), context, [
+    'DOCKER_BLOCK_DEFINITIONS',
+    'DOCKER_TOOLBOX'
+  ]);
   execute(read('blockly_app/src/blocks.ts'), context);
   execute(read('blockly_app/src/generator.ts'), context);
   execute(main.replace('bootstrapBlocklyApp({', 'globalThis.app = bootstrapBlocklyApp({'), context);
@@ -462,10 +460,12 @@ try {
   assert.ok(html.includes('max-height: min(90vh, 900px)'), 'Inspector modal is viewport bounded');
   assert.ok(/#importInspectorBody\s*\{[^}]*overflow-y:\s*auto/.test(html), 'Inspector body owns the shared vertical scrollbar');
   assert.equal(/\.import-code-view,[\s\S]*overflow-y:\s*visible/.test(html), true, 'Inspector panes do not create separate vertical scrollbars');
-  assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "CONFIG"'), 'Generated Service uses dynamic CONFIG chain');
-  assert.ok(read('blockly_app/src/blocks.ts').includes('"name": "ELEMENTS"'), 'Generated Compose uses dynamic ELEMENTS chain');
+  const blockDefinitionSource = read('blockly_app/src/docker-block-definitions.ts');
+  assert.ok(blockDefinitionSource.includes('"name": "CONFIG"'), 'Maintained Service uses dynamic CONFIG chain');
+  assert.ok(blockDefinitionSource.includes('"name": "ELEMENTS"'), 'Maintained Compose uses dynamic ELEMENTS chain');
+  assert.ok(read('blockly_app/src/main.ts').includes('DOCKER_TOOLBOX'), 'Runtime main.ts uses centralized toolbox metadata');
 
-  console.log('[PASS] Final UI actions: dynamic examples, import inspector, bounded/resizable layout hooks, copy/download, runtime/template parity');
+  console.log('[PASS] Final UI actions: dynamic examples, import inspector, bounded/resizable layout hooks, copy/download, maintained runtime wiring');
 } finally {
   workspace.dispose();
 }

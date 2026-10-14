@@ -1,34 +1,36 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import * as Blockly from 'blockly';
 import ts from 'typescript';
 import { parse } from 'yaml';
-import { createServicesForGrammar } from 'langium/grammar';
-
-import { loadGrammar } from '../../generate_blockly/src/grammar-loader.js';
-import { validateGrammar } from '../../generate_blockly/src/validator.js';
-import { buildIR } from '../../generate_blockly/src/ir-builder.js';
-import { generateBlocksTs, generateGeneratorTs } from '../../generate_blockly/src/blockly-ts-target.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
-const dockerGrammar = path.join(repoRoot, 'generate_blockly/input/docker-compose.langium');
 
-function extractBlockDefinitions(blocksTs) {
-  const marker = 'Blockly.defineBlocksWithJsonArray(';
-  const arrayStart = blocksTs.indexOf('[', blocksTs.indexOf(marker));
-  const arrayEnd = blocksTs.indexOf('\n  );', arrayStart);
-  return JSON.parse(blocksTs.slice(arrayStart, arrayEnd).trim());
+function read(relativePath) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8').replace(/\r\n/g, '\n');
 }
 
-async function loadGeneratedGenerator(generatorTs) {
-  const dockerYamlSource = fs.readFileSync(path.join(repoRoot, 'blockly_app/src/docker-yaml.ts'), 'utf8');
-  const tempModule = path.join(__dirname, `.generated-generator-${process.pid}.mjs`);
-  const tempDockerYamlModule = path.join(__dirname, `.generated-docker-yaml-${process.pid}.mjs`);
+function executeScoped(source, expose) {
+  const context = vm.createContext({});
+  const script = source.replace(/^import type[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
+  const output = ts.transpileModule(script, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
+  }).outputText;
+  vm.runInContext(`(() => {\n${output}\n${expose.map(name => `globalThis.${name} = ${name};`).join('\n')}\n})();`, context);
+  return context;
+}
+
+async function loadGenerator() {
+  const generatorTs = read('blockly_app/src/generator.ts');
+  const dockerYamlSource = read('blockly_app/src/docker-yaml.ts');
+  const tempModule = path.join(__dirname, `.generator-${process.pid}.mjs`);
+  const tempDockerYamlModule = path.join(__dirname, `.docker-yaml-${process.pid}.mjs`);
   const transpiledDockerYaml = ts.transpileModule(dockerYamlSource, {
     compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 }
   });
@@ -76,23 +78,12 @@ try {
   console.log('\nDocker Compose YAML Generation Tests\n');
   console.log('Testing Docker Compose YAML generation...');
 
-  const grammar = await loadGrammar(dockerGrammar);
-  validateGrammar(grammar);
-  const ir = buildIR(grammar);
-  const blockDefinitions = extractBlockDefinitions(generateBlocksTs(ir));
-  Blockly.defineBlocksWithJsonArray(blockDefinitions);
-  const { generator } = await loadGeneratedGenerator(generateGeneratorTs(ir));
-  const grammarServices = await createServicesForGrammar({ grammar });
-
-  for (const [label, source] of [
-    ['image-only service', 'compose { service web { image nginx } }'],
-    ['build-only service', 'compose { service web { build "." } }'],
-    ['full service', 'compose { service web { image nginx restart always port 8080 -> 80 environment NODE_ENV = production volume "./data" -> "/data" } network backend driver bridge }']
-  ]) {
-    const parsed = grammarServices.parser.LangiumParser.parse(source);
-    assert.deepEqual(parsed.lexerErrors, [], `${label} has no lexer errors`);
-    assert.deepEqual(parsed.parserErrors, [], `${label} parses`);
-  }
+  const { DOCKER_BLOCK_DEFINITIONS } = executeScoped(
+    read('blockly_app/src/docker-block-definitions.ts'),
+    ['DOCKER_BLOCK_DEFINITIONS']
+  );
+  Blockly.defineBlocksWithJsonArray(DOCKER_BLOCK_DEFINITIONS);
+  const { generator } = await loadGenerator();
 
   const workspace = new Blockly.Workspace();
   try {
@@ -178,7 +169,7 @@ try {
       }
     });
     assert.equal(generator.workspaceToCode(workspace), yaml, 'YAML generation is deterministic');
-    console.log('[PASS] Dynamic service config chain generates deterministic Docker Compose YAML');
+    console.log('[PASS] Maintained service config chain generates deterministic Docker Compose YAML');
   } finally {
     workspace.dispose();
   }

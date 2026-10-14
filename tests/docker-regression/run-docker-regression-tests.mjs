@@ -10,6 +10,7 @@ import { parse } from 'yaml';
 const projectRoot = path.resolve('.');
 const tempBlocksPath = path.join(projectRoot, 'tests/docker-regression/.temp-blocks.mjs');
 const tempGeneratorPath = path.join(projectRoot, 'tests/docker-regression/.temp-generator.mjs');
+const tempDefinitionsPath = path.join(projectRoot, 'tests/docker-regression/.temp-docker-block-definitions.mjs');
 const tempDockerYamlPath = path.join(projectRoot, 'tests/docker-regression/.temp-docker-yaml.mjs');
 
 async function loadTypescriptModule(sourcePath, tempPath) {
@@ -26,6 +27,18 @@ async function loadTypescriptModule(sourcePath, tempPath) {
     });
     await writeFile(tempDockerYamlPath, transpiledDockerYaml.outputText);
     moduleText = outputText.replace("from './docker-yaml';", "from './.temp-docker-yaml.mjs';");
+  }
+
+  if (moduleText.includes("from './docker-block-definitions';")) {
+    const definitionsSource = await readFile(path.join(projectRoot, 'blockly_app/src/docker-block-definitions.ts'), 'utf8');
+    const transpiledDefinitions = ts.transpileModule(definitionsSource, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
+    });
+    await writeFile(tempDefinitionsPath, transpiledDefinitions.outputText);
+    moduleText = moduleText.replace(
+      "from './docker-block-definitions';",
+      "from './.temp-docker-block-definitions.mjs';"
+    );
   }
 
   await writeFile(tempPath, moduleText);
@@ -153,5 +166,6 @@ try {
 } finally {
   await rm(tempBlocksPath, { force: true });
   await rm(tempGeneratorPath, { force: true });
+  await rm(tempDefinitionsPath, { force: true });
   await rm(tempDockerYamlPath, { force: true });
 }

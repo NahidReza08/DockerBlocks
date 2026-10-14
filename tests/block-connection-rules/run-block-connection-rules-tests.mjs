@@ -1,24 +1,23 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
 import * as Blockly from 'blockly';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
-import { loadGrammar } from '../../generate_blockly/src/grammar-loader.js';
-import { validateGrammar } from '../../generate_blockly/src/validator.js';
-import { buildIR } from '../../generate_blockly/src/ir-builder.js';
-import { generateBlocksTs } from '../../generate_blockly/src/blockly-ts-target.js';
+const root = new URL('../../', import.meta.url);
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, '..', '..');
-const dockerGrammar = path.join(repoRoot, 'generate_blockly/input/docker-compose.langium');
+function read(file) {
+  return fs.readFileSync(new URL(file, root), 'utf8').replace(/\r\n/g, '\n');
+}
 
-function extractBlockDefinitions(blocksTs) {
-  const marker = 'Blockly.defineBlocksWithJsonArray(';
-  const markerIndex = blocksTs.indexOf(marker);
-  const arrayStart = blocksTs.indexOf('[', markerIndex);
-  const arrayEnd = blocksTs.indexOf('\n  );', arrayStart);
-  return JSON.parse(blocksTs.slice(arrayStart, arrayEnd).trim());
+function executeScoped(source, expose) {
+  const context = vm.createContext({});
+  const script = source.replace(/^import type[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
+  const output = ts.transpileModule(script, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
+  }).outputText;
+  vm.runInContext(`(() => {\n${output}\n${expose.map(name => `globalThis.${name} = ${name};`).join('\n')}\n})();`, context);
+  return context;
 }
 
 function blockInputs(block) {
@@ -35,17 +34,35 @@ try {
   console.log('\nBlock Connection Rule Tests\n');
   console.log('Testing Docker block connection rules...');
 
-  const grammar = await loadGrammar(dockerGrammar);
-  validateGrammar(grammar);
-  const blocks = extractBlockDefinitions(generateBlocksTs(buildIR(grammar)));
-  const byType = Object.fromEntries(blocks.map((block) => [block.type, block]));
+  const { DOCKER_BLOCK_DEFINITIONS, DOCKER_TOOLBOX } = executeScoped(
+    read('blockly_app/src/docker-block-definitions.ts'),
+    ['DOCKER_BLOCK_DEFINITIONS', 'DOCKER_TOOLBOX']
+  );
+  const byType = Object.fromEntries(DOCKER_BLOCK_DEFINITIONS.map((block) => [block.type, block]));
 
   for (const type of [
     'compose', 'service', 'image', 'build', 'restart', 'healthcheck',
     'dependency', 'networkref', 'network', 'port', 'environment', 'volume'
   ]) {
-    assert.ok(byType[type], `${type} block should be generated`);
+    assert.ok(byType[type], `${type} block should be defined`);
   }
+
+  const toolboxShape = DOCKER_TOOLBOX.contents.map((category) => ({
+      name: category.name,
+      blocks: category.contents.map((entry) => entry.type)
+    }));
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(toolboxShape)),
+    [
+      { name: 'Structure', blocks: ['compose', 'service', 'network'] },
+      {
+        name: 'Service Configuration',
+        blocks: ['image', 'build', 'port', 'environment', 'volume', 'dependency', 'networkref', 'restart', 'healthcheck']
+      }
+    ],
+    'Toolbox order stays stable'
+  );
 
   assert.equal(findInput(byType.compose, 'ELEMENTS')?.check, 'compose_element');
   assert.equal(findInput(byType.compose, 'ELEMENTS')?.type, 'input_statement');
@@ -67,7 +84,7 @@ try {
     assert.equal(byType[type].nextStatement, 'service_config', `${type} stacks in Service CONFIG`);
   }
 
-  Blockly.defineBlocksWithJsonArray(blocks);
+  Blockly.defineBlocksWithJsonArray(DOCKER_BLOCK_DEFINITIONS);
   const workspace = new Blockly.Workspace();
   try {
     const compose = workspace.newBlock('compose');
@@ -120,7 +137,7 @@ try {
     workspace.dispose();
   }
 
-  console.log('[PASS] Dynamic Compose and Service connection rules are enforced');
+  console.log('[PASS] Maintained Docker block connection rules are enforced');
   console.log('\n✓ All block connection rule tests passed\n');
 } catch (error) {
   console.error('\n✗ Block connection rule test failed\n');
