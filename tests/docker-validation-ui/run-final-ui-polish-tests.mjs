@@ -1,0 +1,549 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import * as Blockly from 'blockly';
+import { javascriptGenerator, Order } from 'blockly/javascript';
+import ts from 'typescript';
+import { parseDocument } from 'yaml';
+
+const root = new URL('../../', import.meta.url);
+const read = file => fs.readFileSync(new URL(file, root), 'utf8').replace(/\r\n/g, '\n');
+const main = read('blockly_app/src/main.ts');
+
+function execute(source, context) {
+  const script = source.replace(/^import[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
+  vm.runInContext(ts.transpileModule(script, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
+  }).outputText, context);
+}
+
+function executeScoped(source, context, expose) {
+  const script = source.replace(/^import[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
+  const output = ts.transpileModule(script, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
+  }).outputText;
+  vm.runInContext(`(() => {\n${output}\n${expose.map(name => `globalThis.${name} = ${name};`).join('\n')}\n})();`, context);
+}
+
+function element() {
+  const node = {
+    textContent: '', children: [], listeners: {}, className: '', hidden: false, disabled: false, value: '',
+    title: '', attributes: {}, style: {}, dataset: {}, files: undefined,
+    classList: {
+      values: new Set(),
+      add(...names) { names.forEach(name => this.values.add(name)); },
+      remove(...names) { names.forEach(name => this.values.delete(name)); },
+      contains(name) { return this.values.has(name); },
+      toggle(name, force) {
+        const shouldAdd = force ?? !this.values.has(name);
+        if (shouldAdd) this.values.add(name);
+        else this.values.delete(name);
+        return shouldAdd;
+      }
+    },
+    appendChild(child) { this.children.push(child); return child; },
+    append(...children) { children.forEach(child => this.appendChild(child)); },
+    replaceChildren() { this.children = []; this.textContent = ''; },
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+    removeEventListener(type) { delete this.listeners[type]; },
+    setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'hidden') this.hidden = true; if (name === 'disabled') this.disabled = true; if (name === 'title') this.title = String(value); },
+    removeAttribute(name) { delete this.attributes[name]; if (name === 'hidden') this.hidden = false; if (name === 'disabled') this.disabled = false; },
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    getBoundingClientRect() { return this.rect ?? { left: 0, top: 0, right: 1000, bottom: 600, width: 1000, height: 600 }; },
+    cloneNode() { const clone = element(); clone.dataset = { ...this.dataset }; clone.textContent = this.textContent; return clone; },
+    click() {
+      if (this.disabled) return;
+      this.clicked = true;
+      this.listeners.click?.({ preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {}, target: this });
+    },
+    focus() { this.focused = true; },
+    remove() { this.removed = true; },
+    closest() { return null; }
+  };
+  return node;
+}
+
+function textContentDeep(node) {
+  return (node.textContent ?? '') + (node.children ?? []).map(textContentDeep).join('');
+}
+
+function validationMessages() {
+  return elements.errorOutput.children
+    .filter(child => child.className === 'validation-error')
+    .map(child => textContentDeep(child));
+}
+
+function assertNoBlankImportStatus(label) {
+  assert.equal(elements.importStatus.hidden, true, `${label}: import status is hidden without import/edit content`);
+  assert.equal(elements.importStatus.children.length, 0, `${label}: import status has no empty rendered children`);
+  assert.equal(textContentDeep(elements.importStatus), '', `${label}: import status has no empty rendered text`);
+}
+
+function assertVisibleImportStatus(label) {
+  assert.equal(elements.importStatus.hidden, false, `${label}: import status is visible`);
+  assert.notEqual(textContentDeep(elements.importStatus).trim(), '', `${label}: import status has meaningful content`);
+}
+
+function assertInspectorActionDisabled(label) {
+  assert.equal(elements.openImportInspector.disabled, true, `${label}: YAML info action is disabled`);
+  assert.equal(elements.openImportInspector.getAttribute('aria-disabled'), 'true', `${label}: YAML info action is aria-disabled`);
+}
+
+function assertInspectorActionEnabled(label) {
+  assert.equal(elements.openImportInspector.disabled, false, `${label}: YAML info action is enabled`);
+  assert.equal(elements.openImportInspector.getAttribute('aria-disabled'), 'false', `${label}: YAML info action is aria-enabled`);
+}
+
+const ids = [
+  'codeOutput', 'lineNumbers', 'errorOutput', 'actionStatus', 'yamlStatus', 'blocklyDiv',
+  'summaryEmpty', 'summaryServicesItem', 'summaryNetworksItem', 'summaryVolumesItem',
+  'summaryDependenciesItem', 'summaryHealthchecksItem',
+  'summaryEmptyTitle', 'summaryEmptyMessage',
+  'summaryServices', 'summaryNetworks', 'summaryVolumes', 'summaryDependencies', 'summaryHealthchecks',
+  'exampleSelect', 'loadExample', 'openImportYaml', 'editYaml', 'importDialog', 'importDialogTitle', 'importYamlText',
+  'importYamlFile', 'importStatus', 'importYamlSubmit', 'importYamlCancel', 'chooseYamlFile',
+  'openImportInspector', 'importInspectorDialog', 'importInspectorSummary', 'importInspectorBody',
+  'closeImportInspector', 'clearWorkspaceDialog', 'confirmTrashClear', 'cancelTrashClear',
+  'replaceWorkspaceDialog', 'confirmReplaceWorkspace', 'cancelReplaceWorkspace',
+  'clearWorkspace', 'copyYaml', 'downloadYaml'
+];
+const elements = Object.fromEntries(ids.map(id => [id, element()]));
+elements.blocklyDiv.rect = { left: 100, top: 100, right: 700, bottom: 500, width: 600, height: 400 };
+elements.copyYaml.setAttribute('title', 'Copy YAML');
+elements.copyYaml.setAttribute('aria-label', 'Copy YAML');
+elements.downloadYaml.setAttribute('title', 'Download YAML');
+elements.downloadYaml.setAttribute('aria-label', 'Download YAML');
+elements.importDialog.hidden = true;
+elements.importInspectorDialog.hidden = true;
+elements.clearWorkspaceDialog.hidden = true;
+elements.replaceWorkspaceDialog.hidden = true;
+elements.importStatus.hidden = true;
+const shell = element();
+shell.className = 'app-shell';
+shell.style.setProperty = (name, value) => { shell.style[name] = value; };
+const bottomGrid = element();
+bottomGrid.className = 'bottom-grid';
+const paletteItems = [
+  'compose', 'service', 'image', 'build', 'port', 'environment',
+  'volume', 'dependency', 'networkref', 'restart', 'healthcheck', 'network'
+].map(type => {
+  const item = element();
+  item.dataset = { blockType: type };
+  return item;
+});
+const resizers = ['toolbox', 'yaml', 'bottom', 'validation'].map(kind => {
+  const item = element();
+  item.dataset = { resizer: kind };
+  return item;
+});
+const workspace = new Blockly.Workspace();
+workspace.scroll = () => {};
+const timers = [];
+const downloads = [];
+const anchors = [];
+let copied;
+let injectedOptions;
+const documentListeners = {};
+const navigator = { clipboard: { async writeText(text) { copied = text; } } };
+class FileReaderMock {
+  constructor() { this.listeners = {}; this.result = ''; }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  readAsText(file) { this.result = file.textContent ?? ''; this.listeners.load?.(); }
+}
+
+const context = vm.createContext({
+  Blockly: { ...Blockly, inject: (_id, options) => { injectedOptions = options; return workspace; } },
+  javascriptGenerator, Order, validationErrors: [], navigator, Blob, FileReader: FileReaderMock, parseDocument,
+  URL: {
+    createObjectURL(blob) { downloads.push(blob); return 'blob:yaml'; },
+    revokeObjectURL() {}
+  },
+  setTimeout(callback, delay) { timers.push({ callback, delay }); },
+  getComputedStyle() {
+    return { getPropertyValue(name) {
+      return shell.style[name] ?? (name === '--toolbox-width' ? '240' : name === '--yaml-width' ? '430' : name === '--bottom-height' ? '190' : '500');
+    } };
+  },
+  document: {
+    getElementById: id => elements[id],
+    body: element(),
+    addEventListener(type, handler) { documentListeners[type] = handler; },
+    removeEventListener(type) { delete documentListeners[type]; },
+    querySelector(selector) {
+      if (selector === '.app-shell') return shell;
+      if (selector === '.bottom-grid') return bottomGrid;
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector === '[data-block-type]') return paletteItems;
+      if (selector === '[data-resizer]') return resizers;
+      return [];
+    },
+    createElement(tag) {
+      const node = element();
+      if (tag === 'a') anchors.push(node);
+      return node;
+    }
+  }
+});
+const click = id => elements[id].listeners.click();
+
+try {
+  execute(read('blockly_app/src/docker-yaml.ts'), context);
+  execute(read('blockly_app/src/docker-validation.ts'), context);
+  execute(read('blockly_app/src/validation-ui.ts'), context);
+  for (const [name, file] of Object.entries({fullComposeYaml: 'full-compose', serviceYaml: 'service', networkYaml: 'network'})) {
+    context[name] = read('blockly_app/src/examples/' + file + '.yaml');
+  }
+  execute(read('blockly_app/src/docker-example.ts'), context);
+  executeScoped(read('blockly_app/src/docker-compose-importer.ts'), context, ['importDockerComposeYaml']);
+  execute(read('blockly_app/src/import-inspector.ts'), context);
+  execute(read('blockly_app/src/app-bootstrap.ts'), context);
+  executeScoped(read('blockly_app/src/docker-block-definitions.ts'), context, [
+    'DOCKER_BLOCK_DEFINITIONS'
+  ]);
+  execute(read('blockly_app/src/generator.ts'), context);
+  execute(main.replace('bootstrapBlocklyApp({', 'globalThis.app = bootstrapBlocklyApp({'), context);
+
+  assert.equal(injectedOptions.move.scrollbars, true);
+  assert.deepEqual(elements.exampleSelect.children.map(option => option.textContent), ['Full Compose', 'Service', 'Network']);
+  assert.equal(elements.codeOutput.textContent, '');
+  assert.match(textContentDeep(elements.errorOutput), /No configuration yet/);
+  assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
+  assertNoBlankImportStatus('Empty workspace validation panel');
+  assertInspectorActionDisabled('Fresh app');
+  click('openImportInspector');
+  assert.equal(elements.importInspectorDialog.hidden, true, 'Disabled YAML info action does not open the inspector');
+
+  click('loadExample');
+  assert.equal(elements.actionStatus.textContent, 'Full Compose loaded.');
+  assert.equal(elements.summaryServices.textContent, '2');
+  assert.equal(elements.summaryNetworks.textContent, '1');
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
+  assert.ok(elements.codeOutput.textContent.includes('healthcheck:'));
+  assertNoBlankImportStatus('Valid Blockly validation panel');
+  assertInspectorActionDisabled('Manual Blockly workflow keeps YAML info action disabled');
+  let yamlAfterFullExample = elements.codeOutput.textContent;
+  assert.equal(yamlAfterFullExample.trim(), read('blockly_app/src/examples/full-compose.yaml').trim(), 'Full example YAML stays equivalent');
+  const extraRoot = workspace.newBlock('compose');
+  context.app.handleWorkspaceChange();
+  assert.equal(elements.yamlStatus.textContent, 'Invalid');
+  assert.match(textContentDeep(elements.errorOutput), /Multiple Compose blocks/);
+  extraRoot.dispose(false);
+  context.app.handleWorkspaceChange();
+  assert.equal(elements.yamlStatus.textContent, 'Valid', 'UI clears duplicate-root errors after removal');
+
+  workspace.clear();
+  Blockly.serialization.workspaces.load({
+    blocks: {
+      languageVersion: 0,
+      blocks: [{
+        type: 'compose',
+        inputs: {
+          ELEMENTS: {
+            block: {
+              type: 'service',
+              fields: { NAME: 'web' }
+            }
+          }
+        }
+      }]
+    }
+  }, workspace);
+  context.app.handleWorkspaceChange();
+  assert.match(textContentDeep(elements.errorOutput), /requires an image or build configuration/);
+  assert.equal(validationMessages().length, 1);
+  assertNoBlankImportStatus('Invalid Blockly validation panel');
+  assertInspectorActionDisabled('Invalid Blockly workflow keeps YAML info action disabled');
+
+  click('loadExample');
+  assert.equal(elements.actionStatus.textContent, 'Full Compose loaded.');
+  assert.equal(elements.summaryServices.textContent, '2');
+  assert.equal(elements.summaryNetworks.textContent, '1');
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
+  yamlAfterFullExample = elements.codeOutput.textContent;
+
+  click('editYaml');
+  assert.equal(elements.importDialog.hidden, false);
+  assert.equal(elements.importDialogTitle.textContent, 'Edit Docker Compose YAML');
+  assert.equal(elements.importYamlText.value, yamlAfterFullExample);
+  assert.equal(elements.chooseYamlFile.hidden, true);
+  assert.equal(elements.importYamlSubmit.textContent, 'Apply to Blocks');
+  click('importYamlCancel');
+  assert.equal(elements.codeOutput.textContent, yamlAfterFullExample, 'Canceling YAML edit preserves workspace');
+
+  click('editYaml');
+  elements.importYamlText.value = [
+    'services:',
+    '  edited:',
+    '    image: nginx',
+    '    ports:',
+    '      - "8080:80"',
+    '    command: npm start',
+    ''
+  ].join('\n');
+  click('importYamlSubmit');
+  assert.equal(elements.importDialog.hidden, true);
+  assert.match(textContentDeep(elements.importStatus), /YAML edit applied with warnings/);
+  assertVisibleImportStatus('YAML edit warning status');
+  assertInspectorActionEnabled('YAML edit enables header info action');
+  assert.equal(elements.summaryServices.textContent, '1');
+  assert.match(elements.codeOutput.textContent, /edited:/);
+  assert.match(elements.codeOutput.textContent, /"8080:80"/);
+  assert.doesNotMatch(elements.codeOutput.textContent, /command:/);
+  assert.equal(elements.yamlStatus.textContent, 'Valid');
+  click('openImportInspector');
+  assert.match(textContentDeep(elements.importInspectorSummary), /Edited YAML/);
+  assert.match(textContentDeep(elements.importInspectorBody), /Edited YAML/);
+  assert.match(textContentDeep(elements.importInspectorBody), /command: npm start/);
+  click('closeImportInspector');
+
+  const yamlAfterEdit = elements.codeOutput.textContent;
+  click('editYaml');
+  elements.importYamlText.value = 'services:\n  web: [';
+  click('importYamlSubmit');
+  assert.equal(elements.codeOutput.textContent, yamlAfterEdit, 'Malformed YAML edit preserves workspace');
+  assert.equal(elements.importDialog.hidden, false);
+  assert.match(textContentDeep(elements.importStatus), /YAML edit failed/);
+  assertVisibleImportStatus('YAML edit failure status');
+  assertInspectorActionDisabled('Malformed YAML edit clears header info action');
+  click('importYamlCancel');
+
+  elements.exampleSelect.value = 'service';
+  assert.equal(elements.summaryServices.textContent, '1', 'Changing example selection alone does not load');
+  click('loadExample');
+  assert.equal(elements.summaryServices.textContent, '2', 'Service example adds without clearing');
+  assert.ok(elements.codeOutput.textContent.length > yamlAfterEdit.length);
+  elements.exampleSelect.value = 'network';
+  click('loadExample');
+  assert.equal(elements.summaryNetworks.textContent, '1', 'Network example adds without clearing');
+
+  click('openImportYaml');
+  assert.equal(elements.importDialogTitle.textContent, 'Import Docker Compose YAML');
+  assert.equal(elements.chooseYamlFile.hidden, false);
+  assert.equal(elements.importYamlSubmit.textContent, 'Import');
+  const importedYaml = [
+    "version: '3.8'",
+    '# Database Service',
+    'services:',
+    '  web:',
+    '    image: nginx:latest',
+    '    command: npm start',
+    '    depends_on:',
+    '      db:',
+    '        condition: service_healthy',
+    '    ports:',
+    '      - "8080:80"',
+    '  db:',
+    '    image: postgres:16',
+    ''
+  ].join('\n');
+  elements.importYamlText.value = importedYaml;
+  click('importYamlSubmit');
+  assert.equal(elements.replaceWorkspaceDialog.hidden, false, 'Non-empty workspace import asks before replacing');
+  const beforeReplaceYaml = elements.codeOutput.textContent;
+  click('cancelReplaceWorkspace');
+  assert.equal(elements.replaceWorkspaceDialog.hidden, true);
+  assert.equal(elements.codeOutput.textContent, beforeReplaceYaml, 'Canceling replacement preserves workspace');
+  click('importYamlSubmit');
+  click('confirmReplaceWorkspace');
+  assert.equal(elements.importDialog.hidden, true);
+  assert.match(textContentDeep(elements.importStatus), /YAML imported with warnings/);
+  assert.match(textContentDeep(elements.importStatus), /unsupported\/partial/);
+  assertVisibleImportStatus('YAML import warning status');
+  assertInspectorActionEnabled('YAML import enables header info action');
+  assert.equal(validationMessages().length, 0, 'Unsupported fields stay out of normal validation');
+  click('openImportInspector');
+  assert.equal(elements.importInspectorDialog.hidden, false);
+  assert.match(textContentDeep(elements.importInspectorSummary), /Imported YAML/);
+  assert.match(textContentDeep(elements.importInspectorSummary), /partial/);
+  assert.match(textContentDeep(elements.importInspectorBody), /My Imported YAML/);
+  assert.match(textContentDeep(elements.importInspectorBody), /Generated \/ Preserved YAML/);
+  assert.match(textContentDeep(elements.importInspectorBody), /version: '3.8'/);
+  assert.match(textContentDeep(elements.importInspectorBody), /command: npm start/);
+  assert.match(textContentDeep(elements.importInspectorBody), /condition: service_healthy/);
+  assert.match(textContentDeep(elements.importInspectorBody), /services:\n  web:\n    image: nginx:latest/);
+  const infoButtons = elements.importInspectorBody.children[0].children[0].children[1].children
+    .flatMap(row => row.children.filter?.(child => child.className === 'import-code-info') ?? []);
+  assert.ok(infoButtons.some(button => /metadata/.test(button.title)), 'Inspector info buttons expose ignored metadata reason');
+  assert.ok(infoButtons.some(button => /not supported/.test(button.title)), 'Inspector info buttons expose unsupported or partial reason');
+  click('closeImportInspector');
+
+  const beforeMalformed = elements.codeOutput.textContent;
+  click('openImportYaml');
+  elements.importYamlText.value = 'services:\n  web: [';
+  click('importYamlSubmit');
+  click('confirmReplaceWorkspace');
+  assert.equal(elements.codeOutput.textContent, beforeMalformed, 'Malformed YAML preserves workspace');
+  assert.equal(elements.importDialog.hidden, false);
+  click('importYamlCancel');
+
+  click('clearWorkspace');
+  elements.importYamlFile.files = [{ name: 'docker-compose.yaml', textContent: 'services:\n  worker:\n    image: alpine\n' }];
+  elements.importYamlFile.listeners.change();
+  assert.equal(elements.summaryServices.textContent, '1', 'File import replaces workspace');
+  assertVisibleImportStatus('YAML file import success status');
+  assertInspectorActionEnabled('YAML file import keeps header info action enabled');
+
+  resizers[0].listeners.pointerdown({ preventDefault() {}, clientX: 200, clientY: 0 });
+  documentListeners.pointermove({ clientX: 260, clientY: 0 });
+  documentListeners.pointerup();
+  assert.ok(shell.style['--toolbox-width'], 'Resizable layout updates CSS variables');
+
+  click('clearWorkspace');
+  assert.equal(elements.importStatus.hidden, true);
+  assertNoBlankImportStatus('Cleared workspace validation panel');
+  assertInspectorActionDisabled('Clear resets header info action');
+  assert.equal(elements.codeOutput.textContent, '');
+  assert.equal(elements.blocklyDiv.classList.contains('workspace-empty'), true);
+  click('openImportInspector');
+  assert.equal(elements.importInspectorDialog.hidden, true, 'Disabled YAML info action stays closed after clear');
+
+  const trashTarget = element();
+  trashTarget.closest = selector => selector === '.blocklyTrash' ? trashTarget : null;
+  elements.blocklyDiv.listeners.pointerup({
+    target: trashTarget,
+    preventDefault() { this.defaultPrevented = true; },
+    stopPropagation() { this.stopped = true; },
+    stopImmediatePropagation() { this.immediateStopped = true; }
+  });
+  assert.equal(elements.clearWorkspaceDialog.hidden, true, 'Empty workspace trash click does nothing');
+
+  click('loadExample');
+  elements.blocklyDiv.listeners.pointerup({
+    target: trashTarget,
+    preventDefault() { this.defaultPrevented = true; },
+    stopPropagation() { this.stopped = true; },
+    stopImmediatePropagation() { this.immediateStopped = true; }
+  });
+  assert.equal(elements.clearWorkspaceDialog.hidden, false, 'Trash click opens only confirmation modal');
+  click('cancelTrashClear');
+  assert.equal(elements.clearWorkspaceDialog.hidden, true);
+  assert.equal(elements.summaryServices.textContent, '2', 'Cancel preserves workspace');
+  elements.blocklyDiv.listeners.pointerup({
+    target: trashTarget,
+    preventDefault() {},
+    stopPropagation() {},
+    stopImmediatePropagation() {}
+  });
+  click('confirmTrashClear');
+  assert.equal(elements.codeOutput.textContent, '', 'Confirm clears workspace');
+
+  await click('copyYaml');
+  assert.equal(copied, '');
+  click('downloadYaml');
+  assert.equal(await downloads.at(-1).text(), '');
+
+  workspace.clear();
+  for (const item of paletteItems) {
+    const before = workspace.getAllBlocks(false).length;
+    item.click();
+    assert.equal(workspace.getAllBlocks(false).length, before + 1, 'Palette click adds exactly one ' + item.dataset.blockType);
+  }
+  workspace.clear();
+  const serviceItem = paletteItems.find(item => item.dataset.blockType === 'service');
+  serviceItem.listeners.pointerdown({button: 0, clientX: 10, clientY: 10, preventDefault() {}});
+  documentListeners.pointermove({clientX: 400, clientY: 200});
+  documentListeners.pointerup({clientX: 400, clientY: 200});
+  assert.equal(workspace.getAllBlocks(false).length, 1, 'Palette drop creates one block');
+  assert.equal(workspace.getAllBlocks(false)[0].type, 'service');
+  assert.equal(documentListeners.pointermove, undefined, 'Drag listeners are cleaned up');
+  serviceItem.listeners.pointerdown({button: 0, clientX: 10, clientY: 10, preventDefault() {}});
+  documentListeners.pointerup({clientX: -10, clientY: -10});
+  assert.equal(workspace.getAllBlocks(false).length, 1, 'Canceled drop adds nothing');
+
+  // Exercise append behavior with pre-existing detached blocks and imported Inspector context.
+  for (const existingType of ['empty', 'image', 'service', 'network', 'compose']) {
+    for (const exampleId of ['service', 'network']) {
+      workspace.clear();
+      let existing;
+      if (existingType !== 'empty') {
+        existing = workspace.newBlock(existingType);
+        if (existingType === 'image') existing.setFieldValue('unrelated:keep', 'IMAGE');
+      }
+      const before = workspace.getAllBlocks(false).map(block => block.id);
+      context.loadDockerComposeExample(workspace, exampleId);
+      assert.ok(before.every(id => workspace.getBlockById(id)), 'Append preserves all existing blocks');
+      const added = workspace.getAllBlocks(false).find(block => block.type === exampleId && !before.includes(block.id));
+      assert.ok(added, 'The requested example block is created');
+      const created = workspace.getAllBlocks(false).filter(block => !before.includes(block.id));
+      assert.equal(created.filter(block => block.type === 'service').length, exampleId === 'service' ? 1 : 0, 'Network wrapper service is never inserted');
+      assert.equal(created.filter(block => block.type === 'network').length, exampleId === 'network' ? 1 : 0);
+      if (exampleId === 'service') {
+        assert.equal(added.getInputTargetBlock('CONFIG').getFieldValue('IMAGE'), 'node:20-alpine');
+      }
+      if (existingType === 'compose') assert.equal(existing.getInputTargetBlock('ELEMENTS'), added);
+      else assert.equal(added.getSurroundParent(), null, 'Example stays standalone without Compose');
+      if (existingType === 'image') {
+        assert.equal(existing.getSurroundParent(), null);
+        assert.equal(existing.getFieldValue('IMAGE'), 'unrelated:keep');
+      }
+    }
+  }
+  for (const exampleId of ['full-compose', 'service', 'network']) {
+    click('openImportYaml');
+    elements.importYamlText.value = 'services: {original: {image: nginx}}';
+    click('importYamlSubmit');
+    if (!elements.replaceWorkspaceDialog.hidden) click('confirmReplaceWorkspace');
+    assert.equal(elements.openImportInspector.disabled, false);
+    click('openImportInspector');
+    elements.exampleSelect.value = exampleId;
+    click('loadExample');
+    assertInspectorActionDisabled('Example clears stale import context');
+    assert.equal(elements.importInspectorDialog.hidden, true, 'Example closes stale inspector');
+    assert.equal(elements.importStatus.hidden, true);
+    assert.equal(elements.actionStatus.textContent, (exampleId === 'full-compose' ? 'Full Compose' : exampleId === 'service' ? 'Service' : 'Network') + ' loaded.');
+  }
+
+  const html = read('blockly_app/index.html');
+  const css = read('blockly_app/src/styles/main.css');
+  const sprite = read('blockly_app/src/assets/icons.svg');
+  assert.equal(html.includes('<style>'), false);
+  assert.equal(html.includes('<symbol'), false);
+  for (const [, id] of html.matchAll(/icons.svg#([^" ]+)/g)) {
+    assert.ok(sprite.includes('id="' + id + '"'), 'Every external icon reference resolves');
+  }
+  assert.ok(sprite.includes('fill="currentColor" stroke="none"'), 'Logo fill is self-contained in external sprite');
+  for (const id of [
+    'openImportYaml', 'editYaml', 'openImportInspector', 'importInspectorDialog',
+    'replaceWorkspaceDialog', 'confirmReplaceWorkspace', 'cancelReplaceWorkspace',
+    'clearWorkspaceDialog', 'confirmTrashClear', 'cancelTrashClear'
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `HTML includes ${id}`);
+  }
+  assert.equal(html.includes('id="validateWorkspace"'), false, 'Manual Validate button is removed');
+  assert.equal((html.match(/data-resizer=/g) ?? []).length, 4, 'Four layout resizers are present');
+  assert.equal((html.match(/data-block-type=/g) ?? []).length, 12, 'Palette exposes every supported block action');
+  assert.ok(html.includes('class="example-loader"'), 'Example select and load button are merged into one control');
+  assert.equal(html.includes('Example</span>'), false, 'Toolbar no longer has redundant Example label text');
+  assert.ok(html.includes('docker-blocks-icon.svg'), 'Header/browser branding uses the Docker-Blocks icon');
+  assert.ok(html.includes('icon-hierarchy') && html.includes('icon-sliders') && html.includes('icon-collection'), 'Toolbox category icons are distinct');
+  assert.ok(html.includes('id="openImportInspector"') && html.includes('aria-disabled="true"') && html.includes('disabled'), 'YAML info action starts disabled in static markup');
+  assert.ok(css.includes('.yaml-button:disabled') && css.includes('cursor: not-allowed'), 'Disabled YAML info action has muted disabled styling');
+  assert.ok(read('blockly_app/src/app-bootstrap.ts').includes('function updateImportInspectorAction'), 'Runtime controls YAML info action disabled state');
+  assert.ok(read('blockly_app/src/app-bootstrap.ts').includes('maxTrashcanContents: 0'), 'Blockly trash history flyout is disabled');
+  assert.ok(html.includes('validation-panel-content') && css.includes('overflow-y: auto'), 'Validation body owns the scroll container');
+  assert.equal(/\.validation-panel-content\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(css), false, 'Validation scroll body avoids overlapping positioning');
+  assert.equal(/\.import-status\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(css), false, 'Import status remains in normal document flow');
+  assert.ok(/\.import-status\[hidden\]\s*\{[^}]*display:\s*none/.test(css), 'Hidden import status occupies no validation panel layout space');
+  assert.equal(/#errorOutput[\s\S]*overflow:\s*visible/.test(css), true, 'Validation cards remain normal-flow content inside the scroll body');
+  assert.ok(css.includes('.import-status-header'), 'Import status uses a header row for right-aligned actions');
+  assert.ok(
+    css.includes('.import-details-button') &&
+      css.includes('margin-left: auto') &&
+      css.includes('justify-content: flex-end') &&
+      css.includes('text-align: right'),
+    'Import details action is lightweight and right-aligned'
+  );
+  assert.ok(css.includes('max-height: min(90vh, 900px)'), 'Inspector modal is viewport bounded');
+  assert.ok(/#importInspectorBody\s*\{[^}]*overflow-y:\s*auto/.test(css), 'Inspector body owns the shared vertical scrollbar');
+  assert.equal(/\.import-code-view,[\s\S]*overflow-y:\s*visible/.test(css), true, 'Inspector panes do not create separate vertical scrollbars');
+  const blockDefinitionSource = read('blockly_app/src/docker-block-definitions.ts');
+  assert.ok(blockDefinitionSource.includes('"name": "CONFIG"'), 'Maintained Service uses dynamic CONFIG chain');
+  assert.ok(blockDefinitionSource.includes('"name": "ELEMENTS"'), 'Maintained Compose uses dynamic ELEMENTS chain');
+  assert.ok(read('blockly_app/src/main.ts').includes('DOCKER_BLOCK_DEFINITIONS'), 'Runtime main.ts registers maintained block definitions');
+
+  console.log('[PASS] Final UI actions: dynamic examples, import inspector, bounded/resizable layout hooks, copy/download, maintained runtime wiring');
+} finally {
+  workspace.dispose();
+}

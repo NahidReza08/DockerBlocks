@@ -1,0 +1,18 @@
+services:
+  frontend:
+    image: nginx
+    ports:
+      - "8080:80"
+    environment:
+      NODE_ENV: production
+    volumes:
+      - "./frontend:/usr/share/nginx/html"
+  backend:
+    image: node:20
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      API_PORT: "3000"
+    volumes:
+      - "./data:/app/data"

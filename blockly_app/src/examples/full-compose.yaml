@@ -1,0 +1,35 @@
+services:
+  web:
+    image: docker-blocks-demo-web:latest
+    build: .
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - database
+    networks:
+      - backend
+    ports:
+      - "8080:80"
+    environment:
+      APP_ENV: production
+      DATABASE_HOST: database
+    volumes:
+      - "./web:/usr/share/nginx/html"
+  database:
+    image: postgres:latest
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: example
+    volumes:
+      - "./data:/var/lib/postgresql/data"
+networks:
+  backend:
+    driver: bridge

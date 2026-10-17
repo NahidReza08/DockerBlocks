@@ -1,0 +1,203 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import * as Blockly from 'blockly';
+import ts from 'typescript';
+import { parse } from 'yaml';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '..', '..');
+
+function read(relativePath) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8').replace(/\r\n/g, '\n');
+}
+
+function executeScoped(source, expose) {
+  const context = vm.createContext({});
+  const script = source.replace(/^import type[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
+  const output = ts.transpileModule(script, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
+  }).outputText;
+  vm.runInContext(`(() => {\n${output}\n${expose.map(name => `globalThis.${name} = ${name};`).join('\n')}\n})();`, context);
+  return context;
+}
+
+async function loadGenerator() {
+  const generatorTs = read('blockly_app/src/generator.ts');
+  const dockerYamlSource = read('blockly_app/src/docker-yaml.ts');
+  const tempModule = path.join(__dirname, `.generator-${process.pid}.mjs`);
+  const tempDockerYamlModule = path.join(__dirname, `.docker-yaml-${process.pid}.mjs`);
+  const transpiledDockerYaml = ts.transpileModule(dockerYamlSource, {
+    compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 }
+  });
+  const transpiled = ts.transpileModule(generatorTs, {
+    compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 }
+  });
+  fs.writeFileSync(tempDockerYamlModule, transpiledDockerYaml.outputText, 'utf8');
+  fs.writeFileSync(
+    tempModule,
+    transpiled.outputText.replace("from './docker-yaml';", `from './${path.basename(tempDockerYamlModule)}';`),
+    'utf8'
+  );
+
+  try {
+    return await import(pathToFileURL(tempModule).href + `?t=${Date.now()}`);
+  } finally {
+    fs.unlinkSync(tempModule);
+    fs.unlinkSync(tempDockerYamlModule);
+  }
+}
+
+function connect(parent, inputName, child) {
+  parent.getInput(inputName).connection.connect(child.previousConnection);
+  return child;
+}
+
+function append(after, child) {
+  after.nextConnection.connect(child.previousConnection);
+  return child;
+}
+
+function block(workspace, type, fields = {}) {
+  const result = workspace.newBlock(type);
+  for (const [field, value] of Object.entries(fields)) {
+    result.setFieldValue(String(value), field);
+  }
+  return result;
+}
+
+function image(workspace, value) {
+  return block(workspace, 'image', { IMAGE: value });
+}
+
+try {
+  console.log('\nDocker Compose YAML Generation Tests\n');
+  console.log('Testing Docker Compose YAML generation...');
+
+  const { DOCKER_BLOCK_DEFINITIONS } = executeScoped(
+    read('blockly_app/src/docker-block-definitions.ts'),
+    ['DOCKER_BLOCK_DEFINITIONS']
+  );
+  Blockly.defineBlocksWithJsonArray(DOCKER_BLOCK_DEFINITIONS);
+  const { generator } = await loadGenerator();
+
+  const workspace = new Blockly.Workspace();
+  try {
+    const compose = block(workspace, 'compose');
+    const web = connect(compose, 'ELEMENTS', block(workspace, 'service', { NAME: 'web' }));
+    let config = connect(web, 'CONFIG', image(workspace, 'nginx:latest'));
+    config = append(config, block(workspace, 'volume', { SOURCE: './data', TARGET: '/data' }));
+    config = append(config, block(workspace, 'environment', { KEY: 'NODE_ENV', VALUE: 'production' }));
+    config = append(config, block(workspace, 'port', { HOST_PORT: 8080, CONTAINER_PORT: 80 }));
+    config = append(config, block(workspace, 'restart', { POLICY: 'unless-stopped' }));
+    config = append(config, block(workspace, 'healthcheck', {
+      COMMAND: 'curl -f http://localhost || exit 1',
+      INTERVAL: '30s',
+      TIMEOUT: '10s',
+      RETRIES: 3
+    }));
+    config = append(config, block(workspace, 'dependency', { TARGET: 'db' }));
+    config = append(config, block(workspace, 'networkref', { TARGET: 'backend' }));
+
+    const db = append(web, block(workspace, 'service', { NAME: 'db' }));
+    let dbConfig = connect(db, 'CONFIG', image(workspace, 'postgres:15'));
+    dbConfig = append(dbConfig, block(workspace, 'environment', { KEY: 'POSTGRES_PASSWORD', VALUE: 'example' }));
+    dbConfig = append(dbConfig, block(workspace, 'volume', { SOURCE: 'pgdata', TARGET: '/var/lib/postgresql/data' }));
+    append(db, block(workspace, 'network', { NAME: 'backend', DRIVER: 'bridge' }));
+
+    const yaml = generator.workspaceToCode(workspace);
+    const expected =
+      'services:\n' +
+      '  web:\n' +
+      '    image: nginx:latest\n' +
+      '    restart: unless-stopped\n' +
+      '    healthcheck:\n' +
+      '      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]\n' +
+      '      interval: 30s\n' +
+      '      timeout: 10s\n' +
+      '      retries: 3\n' +
+      '    depends_on:\n' +
+      '      - db\n' +
+      '    networks:\n' +
+      '      - backend\n' +
+      '    ports:\n' +
+      '      - "8080:80"\n' +
+      '    environment:\n' +
+      '      NODE_ENV: production\n' +
+      '    volumes:\n' +
+      '      - "./data:/data"\n' +
+      '  db:\n' +
+      '    image: postgres:15\n' +
+      '    environment:\n' +
+      '      POSTGRES_PASSWORD: example\n' +
+      '    volumes:\n' +
+      '      - "pgdata:/var/lib/postgresql/data"\n' +
+      'networks:\n' +
+      '  backend:\n' +
+      '    driver: bridge\n';
+
+    assert.equal(yaml, expected, 'YAML generation uses canonical key order independent of visual config order');
+    assert.deepEqual(parse(yaml), {
+      services: {
+        web: {
+          image: 'nginx:latest',
+          restart: 'unless-stopped',
+          healthcheck: {
+            test: ['CMD-SHELL', 'curl -f http://localhost || exit 1'],
+            interval: '30s',
+            timeout: '10s',
+            retries: 3
+          },
+          depends_on: ['db'],
+          networks: ['backend'],
+          ports: ['8080:80'],
+          environment: { NODE_ENV: 'production' },
+          volumes: ['./data:/data']
+        },
+        db: {
+          image: 'postgres:15',
+          environment: { POSTGRES_PASSWORD: 'example' },
+          volumes: ['pgdata:/var/lib/postgresql/data']
+        }
+      },
+      networks: {
+        backend: { driver: 'bridge' }
+      }
+    });
+    assert.equal(generator.workspaceToCode(workspace), yaml, 'YAML generation is deterministic');
+    console.log('[PASS] Maintained service config chain generates deterministic Docker Compose YAML');
+  } finally {
+    workspace.dispose();
+  }
+
+  for (const [policy, expectedScalar] of [
+    ['no', '"no"'],
+    ['always', 'always'],
+    ['on-failure', 'on-failure'],
+    ['unless-stopped', 'unless-stopped']
+  ]) {
+    const restartWorkspace = new Blockly.Workspace();
+    try {
+      const compose = block(restartWorkspace, 'compose');
+      const service = connect(compose, 'ELEMENTS', block(restartWorkspace, 'service', { NAME: 'web' }));
+      const img = connect(service, 'CONFIG', image(restartWorkspace, 'nginx'));
+      append(img, block(restartWorkspace, 'restart', { POLICY: policy }));
+      const yaml = generator.workspaceToCode(restartWorkspace);
+      assert.equal(yaml, `services:\n  web:\n    image: nginx\n    restart: ${expectedScalar}\n`);
+      assert.equal(parse(yaml).services.web.restart, policy);
+    } finally {
+      restartWorkspace.dispose();
+    }
+  }
+  console.log('[PASS] Restart policies generate parse-safe YAML including quoted no');
+
+  console.log('\n✓ All Docker Compose YAML generation tests passed\n');
+} catch (error) {
+  console.error('\n✗ Docker Compose YAML generation test failed\n');
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+}
