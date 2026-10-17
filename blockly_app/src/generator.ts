@@ -1,69 +1,47 @@
 import * as Blockly from 'blockly';
-
-import { javascriptGenerator, Order } from 'blockly/javascript';
+import { javascriptGenerator } from 'blockly/javascript';
 import {
   generateDockerComposeYaml,
-  generateDockerBuildYaml,
-  generateDockerDependencyYaml,
-  generateDockerEnvironmentYaml,
-  generateDockerHealthcheckYaml,
-  generateDockerImageYaml,
-  generateDockerNetworkRefYaml,
-  generateDockerNetworkYaml,
-  generateDockerPortYaml,
-  generateDockerRestartYaml,
   generateDockerServiceYaml,
-  generateDockerVolumeYaml
+  generateDockerNetworkYaml,
+  configGenerators,
+  generateComposeElementsYaml,
+  generateServiceConfigYaml,
+  collectBlockStack
 } from './docker-yaml';
-
 
 export const generator = javascriptGenerator;
 generator.INDENT = '  ';
 
-generator.forBlock['compose'] = function (block: Blockly.Block): string {
-  return generateDockerComposeYaml(block, generator);
+// Connected blocks are assembled by their parent helpers. When a block is
+// detached, show a meaningful preview fragment instead of hiding its output.
+const blockGenerators = {
+  compose: generateDockerComposeYaml,
+  service: generateDockerServiceYaml,
+  network: generateDockerNetworkYaml,
+  ...configGenerators
 };
 
-generator.forBlock['service'] = function (block: Blockly.Block): string {
-  return generateDockerServiceYaml(block, generator);
-};
+// Blockly's default JavaScript scrubber appends the next statement automatically.
+// Our Docker helpers traverse their own stacks, so that would duplicate/misalign YAML.
+generator.scrub_ = (_block, code) => code;
 
-generator.forBlock['image'] = function (block: Blockly.Block): string {
-  return generateDockerImageYaml(block);
-};
+function withPreview(
+  type: string,
+  handler: (block: Blockly.Block) => string
+): (block: Blockly.Block) => string {
+  return (block) => {
+    if (type === 'compose' || block.getParent()) {
+      return handler(block);
+    }
 
-generator.forBlock['dependency'] = function (block: Blockly.Block): string {
-  return generateDockerDependencyYaml(block);
-};
+    const stack = collectBlockStack(block);
+    return type === 'service' || type === 'network'
+      ? generateComposeElementsYaml(stack)
+      : generateServiceConfigYaml(stack, true);
+  };
+}
 
-generator.forBlock['build'] = function (block: Blockly.Block): [string, Order] {
-  return generateDockerBuildYaml(block);
-};
-
-generator.forBlock['restart'] = function (block: Blockly.Block): [string, Order] {
-  return generateDockerRestartYaml(block);
-};
-
-generator.forBlock['healthcheck'] = function (block: Blockly.Block): [string, Order] {
-  return generateDockerHealthcheckYaml(block);
-};
-
-generator.forBlock['networkref'] = function (block: Blockly.Block): string {
-  return generateDockerNetworkRefYaml(block);
-};
-
-generator.forBlock['network'] = function (block: Blockly.Block): string {
-  return generateDockerNetworkYaml(block);
-};
-
-generator.forBlock['port'] = function (block: Blockly.Block): string {
-  return generateDockerPortYaml(block);
-};
-
-generator.forBlock['environment'] = function (block: Blockly.Block): string {
-  return generateDockerEnvironmentYaml(block);
-};
-
-generator.forBlock['volume'] = function (block: Blockly.Block): string {
-  return generateDockerVolumeYaml(block);
-};
+for (const [type, handler] of Object.entries(blockGenerators)) {
+  generator.forBlock[type] = withPreview(type, handler);
+}

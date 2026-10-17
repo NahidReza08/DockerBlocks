@@ -1,13 +1,15 @@
+import * as Blockly from 'blockly';
+
 import { bootstrapBlocklyApp } from './app-bootstrap';
-import { defineBlocks } from './blocks';
-import { DOCKER_TOOLBOX } from './docker-block-definitions';
+import {
+  DOCKER_BLOCK_DEFINITIONS
+} from './docker-block-definitions';
 import { generator } from './generator';
-import { validationErrors } from './validation-errors';
 
-defineBlocks();
+// Register custom Docker blocks
+Blockly.defineBlocksWithJsonArray(DOCKER_BLOCK_DEFINITIONS);
 
+// Initialize the application
 bootstrapBlocklyApp({
-  toolbox: DOCKER_TOOLBOX,
-  generator,
-  validationErrors
+  generator
 });

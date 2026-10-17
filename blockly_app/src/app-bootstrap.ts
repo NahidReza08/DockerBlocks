@@ -1,6 +1,6 @@
 import * as Blockly from 'blockly';
-
 import type { UiValidationError } from './app-types';
+
 import {
   DOCKER_COMPOSE_EXAMPLES,
   loadDockerComposeExample
@@ -19,9 +19,7 @@ type WorkspaceGenerator = {
 };
 
 type BootstrapOptions = {
-  toolbox: Blockly.utils.toolbox.ToolboxDefinition;
   generator: WorkspaceGenerator;
-  validationErrors: UiValidationError[];
 };
 
 type UiState = 'empty' | 'incomplete' | 'valid' | 'invalid';
@@ -40,12 +38,8 @@ type YamlTransformationContext = {
 };
 
 export function bootstrapBlocklyApp({
-  toolbox,
-  generator,
-  validationErrors
+  generator
 }: BootstrapOptions) {
-  void toolbox;
-
   const workspace = Blockly.inject('blocklyDiv', {
     grid: {
       spacing: 20,
@@ -111,10 +105,7 @@ export function bootstrapBlocklyApp({
   let pendingImportYaml: string | null = null;
 
   function collectValidationErrors() {
-    return [
-      ...validationErrors,
-      ...collectDockerValidationErrors(workspace)
-    ];
+    return collectDockerValidationErrors(workspace);
   }
 
   function getBlockCounts() {
@@ -482,6 +473,8 @@ export function bootstrapBlocklyApp({
       workspace,
       exampleSelect?.value
     );
+    clearImportStatus();
+    hideImportInspector();
     handleWorkspaceChange();
     showActionStatus(selectedExample.name + ' loaded.');
   }
@@ -811,14 +804,9 @@ export function bootstrapBlocklyApp({
 
   document.querySelectorAll<HTMLElement>('[data-block-type]').forEach((item) => {
     item.addEventListener('pointerdown', (event) => startPaletteDrag(item, event));
-    item.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-
-      event.preventDefault();
+    item.addEventListener('click', () => {
       const blockType = item.dataset.blockType;
-      if (!blockType) return;
-
-      addPaletteBlock(blockType, item.dataset.paletteFeature);
+      if (blockType) addPaletteBlock(blockType, item.dataset.paletteFeature);
     });
   });
   if (typeof window !== 'undefined') {

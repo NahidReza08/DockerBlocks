@@ -1,0 +1,12 @@
+services:
+  api:
+    image: node:20-alpine
+    restart: unless-stopped
+    networks:
+      - backend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+    volumes:
+      - "./app:/usr/src/app"

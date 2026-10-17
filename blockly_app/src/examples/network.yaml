@@ -1,0 +1,7 @@
+# Minimal Compose wrapper for the importer; only the Network block is inserted.
+services:
+  api:
+    image: node:20-alpine
+networks:
+  backend:
+    driver: bridge

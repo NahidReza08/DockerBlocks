@@ -32,17 +32,15 @@ execute(
     '\nglobalThis.DOCKER_BLOCK_DEFINITIONS = DOCKER_BLOCK_DEFINITIONS;',
   context
 );
-execute(read('blockly_app/src/blocks.ts'), context);
 execute(read('blockly_app/src/generator.ts') + '\nglobalThis.generator = generator;', context);
 execute(read('blockly_app/src/docker-compose-importer.ts'), context);
 
 const {
-  defineBlocks,
   generator,
   importDockerComposeYaml
 } = context;
 
-defineBlocks();
+Blockly.defineBlocksWithJsonArray(context.DOCKER_BLOCK_DEFINITIONS);
 
 function loadImportedWorkspace(yaml) {
   const result = importDockerComposeYaml(yaml);
@@ -471,6 +469,28 @@ networks:
     assert.equal(findBlock(workspace, 'networkref').getFieldValue('TARGET'), 'backend');
     workspace.dispose();
   }
+
+  for (const yaml of [
+    'services: {web: {image: nginx}}\nservices: {db: {image: postgres}}',
+    'services: {web: {image: nginx}}\nnetworks: {front: {}}\nnetworks: {back: {}}',
+    'services: {web: {image: nginx, image: postgres}}',
+    'services: {web: {environment: {MODE: dev, MODE: prod}}}'
+  ]) {
+    const result = importDockerComposeYaml(yaml);
+    assert.equal(result.success, false, 'Duplicate mapping keys must fail');
+    assert.equal(result.workspaceState, undefined, 'Duplicate keys cannot replace workspace data');
+    assert.match(result.errors[0].message, /unique/i);
+    assert.ok(result.errors[0].line > 0, 'Duplicate-key error identifies its source line');
+    assert.ok(result.report.lines.some(line => line.status === 'invalid'));
+  }
+  const aliasYaml = 'services:\n  web: &base\n    image: nginx\n    environment: {MODE: dev}\n  api:\n    <<: *base\n    image: node\n  worker: *base\n';
+  const { workspace: aliasWorkspace } = loadImportedWorkspace(aliasYaml);
+  assert.equal(serviceImage(aliasWorkspace, 'web'), 'nginx');
+  assert.equal(serviceImage(aliasWorkspace, 'api'), 'node', 'Explicit key overrides merge');
+  assert.equal(serviceImage(aliasWorkspace, 'worker'), 'nginx');
+  aliasWorkspace.dispose();
+  assert.equal(importDockerComposeYaml('services: {web: *missing}').success, false, 'Unresolved aliases are reported');
+  assert.equal(importDockerComposeYaml('networks: {backend: {driver: bridge}}').success, false, 'Normal import retains services requirement');
 
   console.log('[PASS] Docker Compose reverse importer: parsing, normalization, warnings, Blockly state loading');
 } finally {

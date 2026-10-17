@@ -34,9 +34,9 @@ try {
   console.log('\nBlock Connection Rule Tests\n');
   console.log('Testing Docker block connection rules...');
 
-  const { DOCKER_BLOCK_DEFINITIONS, DOCKER_TOOLBOX } = executeScoped(
+  const { DOCKER_BLOCK_DEFINITIONS } = executeScoped(
     read('blockly_app/src/docker-block-definitions.ts'),
-    ['DOCKER_BLOCK_DEFINITIONS', 'DOCKER_TOOLBOX']
+    ['DOCKER_BLOCK_DEFINITIONS']
   );
   const byType = Object.fromEntries(DOCKER_BLOCK_DEFINITIONS.map((block) => [block.type, block]));
 
@@ -47,22 +47,27 @@ try {
     assert.ok(byType[type], `${type} block should be defined`);
   }
 
-  const toolboxShape = DOCKER_TOOLBOX.contents.map((category) => ({
-      name: category.name,
-      blocks: category.contents.map((entry) => entry.type)
-    }));
-
+  const palette = read('blockly_app/index.html');
   assert.deepEqual(
-    JSON.parse(JSON.stringify(toolboxShape)),
-    [
-      { name: 'Structure', blocks: ['compose', 'service', 'network'] },
-      {
-        name: 'Service Configuration',
-        blocks: ['image', 'build', 'port', 'environment', 'volume', 'dependency', 'networkref', 'restart', 'healthcheck']
-      }
-    ],
-    'Toolbox order stays stable'
+    [...palette.matchAll(/data-block-type="([^"]+)"/g)].map((match) => match[1]),
+    ['compose', 'service', 'image', 'build', 'port', 'environment', 'volume',
+      'dependency', 'networkref', 'restart', 'healthcheck', 'network'],
+    'Custom palette exposes every block in the existing order'
   );
+
+  const groups = [...palette.matchAll(/<section class="palette-group ([^"]+)"[^>]*>([\s\S]*?)<\/section>/g)];
+  const actualGroups = Object.fromEntries(groups.map(([, name, markup]) => [
+    name, [...markup.matchAll(/data-block-type="([^"]+)"/g)].map(match => match[1])
+  ]));
+  assert.deepEqual(actualGroups, {
+    structure: ['compose'],
+    'service-config': ['service', 'image', 'build', 'port', 'environment', 'volume',
+      'dependency', 'networkref', 'restart', 'healthcheck'],
+    resources: ['network']
+  }, 'Palette categories retain every block under the requested heading');
+  assert.match(palette, /icons.svg#icon-collection"><\/use><\/svg>Blocks Toolbox/);
+  assert.match(palette, /data-block-type="service"[^\n]*icons.svg#icon-server/);
+  assert.match(palette, /data-block-type="image"[^\n]*icons.svg#icon-package/);
 
   assert.equal(findInput(byType.compose, 'ELEMENTS')?.check, 'compose_element');
   assert.equal(findInput(byType.compose, 'ELEMENTS')?.type, 'input_statement');

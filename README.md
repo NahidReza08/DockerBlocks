@@ -75,21 +75,22 @@ artifacts.
 
 ```text
 blockly_app/
-  index.html                    static UI, CSS, modals, and panels
+  index.html                    static UI, modals, and panels
   src/
-    main.ts                     small application entry point
-    docker-block-definitions.ts  maintained Blockly block and toolbox metadata
-    blocks.ts                   registers Docker block definitions with Blockly
+    main.ts                     registers blocks and starts the application
+    docker-block-definitions.ts  maintained Blockly block definitions
     generator.ts                Blockly generator wiring for Docker blocks
     docker-yaml.ts              YAML generation helpers
     docker-validation.ts        workspace validation rules
     docker-compose-importer.ts  YAML -> Blockly workspace import engine
-    docker-example.ts           built-in demo workspaces
+    examples/                   Compose YAML example files
+    styles/main.css             application styles
+    assets/icons.svg            SVG symbol sprite
+    docker-example.ts           loads YAML examples through the importer
     app-bootstrap.ts            UI wiring, workspace events, import/edit actions
     validation-ui.ts            validation panel and Blockly warning plumbing
     import-inspector.ts         YAML import/edit inspector rendering
     app-types.ts                shared runtime types
-    validation-errors.ts        reserved static validation-error list
 ```
 
 `blockly_app/dist/` is Vite build output and is not source.
@@ -97,7 +98,7 @@ blockly_app/
 There is no separate code-generation source-of-truth workflow anymore. To add
 or change a Docker block, update the maintained source modules directly:
 
-1. Add or adjust block/toolbox metadata in
+1. Add or adjust block definitions in
    `blockly_app/src/docker-block-definitions.ts`.
 2. Add YAML generation in `blockly_app/src/docker-yaml.ts` and wire it from
    `blockly_app/src/generator.ts`.
@@ -118,7 +119,7 @@ npm run build
 
 The test suites cover:
 
-- Blockly connection rules and toolbox/block metadata.
+- Blockly connection rules, custom palette, and block definitions.
 - Deterministic Docker Compose YAML generation.
 - Docker validation regressions for names, image/build requirements, ports,
   environment entries, volumes, dependencies, networks, restart, and
@@ -165,3 +166,16 @@ Development dependencies:
 - `vite`
 - `yaml`
 
+Workspace names and reference targets are compared exactly (including whitespace);
+trimming is used only to check required values. This preserves user-provided names.
+Only one Compose root is allowed; standalone Service and Network blocks remain supported.
+YAML imports reject duplicate mapping keys and support anchors, aliases, and merge keys.
+Examples use the importer without creating an import/edit Inspector report.
+
+The custom palette groups Compose under Structure, Service and its options under
+Service Configuration, and Network under Resources. The heading uses a grid icon,
+Service uses a server icon, and Image retains its package icon. Native button click
+activation supports mouse clicks and Enter/Space alongside pointer drag/drop.
+`app-types.ts` remains a shared type-only module so domain validation and UI modules
+do not depend on each other at runtime. The network example contains a minimal
+Compose wrapper; example loading extracts only its Network block.

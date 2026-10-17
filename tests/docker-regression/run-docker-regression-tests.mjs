@@ -51,7 +51,8 @@ async function loadDockerValidationCollector() {
   const { outputText } = ts.transpileModule(script, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
   });
-  return new Function(outputText + '\nreturn collectDockerValidationErrors;')();
+  const { collectBlockStack } = await import(pathToFileURL(tempDockerYamlPath).href);
+  return new Function('collectBlockStack', outputText + '\nreturn collectDockerValidationErrors;')(collectBlockStack);
 }
 
 function block(workspace, type, fields = {}) {
@@ -79,10 +80,10 @@ function service(workspace, name, imageName) {
 console.log('\nDocker Regression Tests\n');
 
 try {
-  const { defineBlocks } = await loadTypescriptModule(path.join(projectRoot, 'blockly_app/src/blocks.ts'), tempBlocksPath);
+  const { DOCKER_BLOCK_DEFINITIONS } = await loadTypescriptModule(path.join(projectRoot, 'blockly_app/src/docker-block-definitions.ts'), tempBlocksPath);
   const { generator } = await loadTypescriptModule(path.join(projectRoot, 'blockly_app/src/generator.ts'), tempGeneratorPath);
   const collect = await loadDockerValidationCollector();
-  defineBlocks();
+  Blockly.defineBlocksWithJsonArray(DOCKER_BLOCK_DEFINITIONS);
 
   const workspace = new Blockly.Workspace();
   try {
@@ -160,6 +161,35 @@ try {
     console.log('[PASS] Validation covers duplicates, singleton cardinality, and required image/build behavior');
   } finally {
     workspace.dispose();
+  }
+
+  const rootsWorkspace = new Blockly.Workspace();
+  try {
+    const roots = [];
+    for (let count = 1; count <= 3; count++) {
+      const root = block(rootsWorkspace, 'compose');
+      roots.push(root);
+      connect(root, 'ELEMENTS', service(rootsWorkspace, 'service' + count, 'nginx'));
+      const errors = collect(rootsWorkspace);
+      assert.equal(errors.length, count === 1 ? 0 : count);
+      assert.ok(errors.every(error => error.message === 'Multiple Compose blocks detected. Only one Compose root is allowed.'));
+      assert.deepEqual(errors.map(error => error.blockId).sort(), count === 1 ? [] : roots.map(root => root.id).sort());
+    }
+    roots.pop().dispose(false);
+    assert.equal(collect(rootsWorkspace).length, 2, 'Two remaining roots are still invalid');
+    roots.pop().dispose(false);
+    assert.deepEqual(collect(rootsWorkspace), [], 'Removing extra roots restores valid status');
+    const first = roots[0].getInputTargetBlock('ELEMENTS');
+    const second = append(first, service(rootsWorkspace, 'second', 'postgres'));
+    const network = append(second, block(rootsWorkspace, 'network', { NAME: 'front' }));
+    append(network, block(rootsWorkspace, 'network', { NAME: 'back' }));
+    assert.deepEqual(collect(rootsWorkspace), [], 'Multiple services and networks inside one root remain valid');
+    first.unplug();
+    roots[0].dispose(false);
+    assert.deepEqual(collect(rootsWorkspace), [], 'Standalone services and networks remain valid without a root');
+    console.log('[PASS] One/two/three Compose roots, removal, multiple children, and standalone validation');
+  } finally {
+    rootsWorkspace.dispose();
   }
 
   console.log('\n[PASS] All Docker regression tests passed\n');

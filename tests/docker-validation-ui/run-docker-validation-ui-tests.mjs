@@ -136,8 +136,8 @@ function assertDockerValidationRules(source, context) {
 function assertSharedValidationPipeline(appBootstrapSource, validationUiSource) {
   assert.match(
     appBootstrapSource,
-    /\.\.\.validationErrors,\s*\.\.\.collectDockerValidationErrors\(workspace\)/,
-    'Bootstrap: static and Docker errors should enter the same validation state.'
+    /return collectDockerValidationErrors\(workspace\)/,
+    'Bootstrap: workspace errors should enter the shared validation state.'
   );
 
   assert.match(
@@ -173,8 +173,8 @@ assert.match(
 
 assert.match(
   read(mainTsFile),
-  /DOCKER_TOOLBOX/,
-  'main.ts should use the centralized Docker toolbox definition.'
+  /DOCKER_BLOCK_DEFINITIONS/,
+  'main.ts should use the centralized Docker block definitions.'
 );
 
 const dockerBlockDefinitions = read(dockerBlockDefinitionsFile);
@@ -190,8 +190,8 @@ for (const blockType of [
 
 assert.match(
   dockerBlockDefinitions,
-  /DOCKER_TOOLBOX/,
-  'Docker toolbox metadata should live with the maintained block definitions.'
+  /DOCKER_BLOCK_DEFINITIONS/,
+  'Docker definitions remain in the maintained block module.'
 );
 
 assertDockerValidationRules(

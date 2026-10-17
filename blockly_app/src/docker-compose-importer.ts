@@ -336,19 +336,21 @@ export function parseComposeYaml(yamlText: string): {
   }
 
   const document = parseDocument(yamlText, {
-    uniqueKeys: false
+    uniqueKeys: true,
+    merge: true
   });
 
   if (document.errors.length > 0) {
     return {
-      errors: document.errors.map((error) => issue('$', error.message))
+      errors: document.errors.map((error) => issue('$', error.message, error.linePos?.[0].line))
     };
   }
 
-  return {
-    parsed: document.toJS(),
-    errors: []
-  };
+  try {
+    return { parsed: document.toJS(), errors: [] };
+  } catch (error) {
+    return { errors: [issue('$', error instanceof Error ? error.message : String(error))] };
+  }
 }
 
 function normalizePorts(

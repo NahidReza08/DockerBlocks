@@ -1,6 +1,7 @@
 import type * as Blockly from 'blockly';
 
 import type { UiValidationError } from './app-types';
+import { collectBlockStack } from './docker-yaml';
 
 const SUPPORTED_RESTART_POLICIES = new Set([
   'no',
@@ -73,18 +74,6 @@ function getOwningServiceBlock(block: Blockly.Block): Blockly.Block | null {
   return null;
 }
 
-function statementBlocks(block: Blockly.Block, inputName: string): Blockly.Block[] {
-  const blocks: Blockly.Block[] = [];
-  let current = block.getInputTargetBlock(inputName);
-
-  while (current) {
-    blocks.push(current);
-    current = current.getNextBlock();
-  }
-
-  return blocks;
-}
-
 function firstNonEmptyField(blocks: Blockly.Block[], fieldName: string): string {
   return blocks
     .map((block) => trimFieldValue(block.getFieldValue(fieldName)))
@@ -115,11 +104,19 @@ export function collectDockerValidationErrors(
   const serviceBlocksByName = new Map<string, Blockly.Block[]>();
   const networkBlocksByName = new Map<string, Blockly.Block[]>();
 
-  workspace.getAllBlocks(false).forEach((block) => {
+  const allBlocks = workspace.getAllBlocks(false);
+  const composeBlocks = allBlocks.filter((block) => block.type === 'compose');
+  if (composeBlocks.length > 1) {
+    composeBlocks.forEach((block) => errors.push(requiredError(
+      'Multiple Compose blocks detected. Only one Compose root is allowed.', block.id
+    )));
+  }
+
+  allBlocks.forEach((block) => {
     if (block.type === 'service') {
       const rawName = String(block.getFieldValue('NAME') ?? '');
       const name = trimFieldValue(rawName);
-      const configBlocks = statementBlocks(block, 'CONFIG');
+      const configBlocks = collectBlockStack(block.getInputTargetBlock('CONFIG'));
       const imageBlocks = configBlocks.filter((child) => child.type === 'image');
       const buildBlocks = configBlocks.filter((child) => child.type === 'build');
       const restartBlocks = configBlocks.filter((child) => child.type === 'restart');
@@ -271,7 +268,7 @@ export function collectDockerValidationErrors(
     });
   });
 
-  workspace.getAllBlocks(false).forEach((block) => {
+  allBlocks.forEach((block) => {
     if (block.type !== 'dependency') return;
 
     const rawTarget = String(block.getFieldValue('TARGET') ?? '');
@@ -297,7 +294,7 @@ export function collectDockerValidationErrors(
     }
   });
 
-  workspace.getAllBlocks(false).forEach((block) => {
+  allBlocks.forEach((block) => {
     if (block.type !== 'networkref') return;
 
     const rawTarget = String(block.getFieldValue('TARGET') ?? '');

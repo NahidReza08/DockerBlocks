@@ -192,15 +192,16 @@ try {
   execute(read('blockly_app/src/docker-yaml.ts'), context);
   execute(read('blockly_app/src/docker-validation.ts'), context);
   execute(read('blockly_app/src/validation-ui.ts'), context);
+  for (const [name, file] of Object.entries({fullComposeYaml: 'full-compose', serviceYaml: 'service', networkYaml: 'network'})) {
+    context[name] = read('blockly_app/src/examples/' + file + '.yaml');
+  }
   execute(read('blockly_app/src/docker-example.ts'), context);
   executeScoped(read('blockly_app/src/docker-compose-importer.ts'), context, ['importDockerComposeYaml']);
   execute(read('blockly_app/src/import-inspector.ts'), context);
   execute(read('blockly_app/src/app-bootstrap.ts'), context);
   executeScoped(read('blockly_app/src/docker-block-definitions.ts'), context, [
-    'DOCKER_BLOCK_DEFINITIONS',
-    'DOCKER_TOOLBOX'
+    'DOCKER_BLOCK_DEFINITIONS'
   ]);
-  execute(read('blockly_app/src/blocks.ts'), context);
   execute(read('blockly_app/src/generator.ts'), context);
   execute(main.replace('bootstrapBlocklyApp({', 'globalThis.app = bootstrapBlocklyApp({'), context);
 
@@ -223,6 +224,14 @@ try {
   assertNoBlankImportStatus('Valid Blockly validation panel');
   assertInspectorActionDisabled('Manual Blockly workflow keeps YAML info action disabled');
   let yamlAfterFullExample = elements.codeOutput.textContent;
+  assert.equal(yamlAfterFullExample.trim(), read('blockly_app/src/examples/full-compose.yaml').trim(), 'Full example YAML stays equivalent');
+  const extraRoot = workspace.newBlock('compose');
+  context.app.handleWorkspaceChange();
+  assert.equal(elements.yamlStatus.textContent, 'Invalid');
+  assert.match(textContentDeep(elements.errorOutput), /Multiple Compose blocks/);
+  extraRoot.dispose(false);
+  context.app.handleWorkspaceChange();
+  assert.equal(elements.yamlStatus.textContent, 'Valid', 'UI clears duplicate-root errors after removal');
 
   workspace.clear();
   Blockly.serialization.workspaces.load({
@@ -425,7 +434,76 @@ try {
   click('downloadYaml');
   assert.equal(await downloads.at(-1).text(), '');
 
+  workspace.clear();
+  for (const item of paletteItems) {
+    const before = workspace.getAllBlocks(false).length;
+    item.click();
+    assert.equal(workspace.getAllBlocks(false).length, before + 1, 'Palette click adds exactly one ' + item.dataset.blockType);
+  }
+  workspace.clear();
+  const serviceItem = paletteItems.find(item => item.dataset.blockType === 'service');
+  serviceItem.listeners.pointerdown({button: 0, clientX: 10, clientY: 10, preventDefault() {}});
+  documentListeners.pointermove({clientX: 400, clientY: 200});
+  documentListeners.pointerup({clientX: 400, clientY: 200});
+  assert.equal(workspace.getAllBlocks(false).length, 1, 'Palette drop creates one block');
+  assert.equal(workspace.getAllBlocks(false)[0].type, 'service');
+  assert.equal(documentListeners.pointermove, undefined, 'Drag listeners are cleaned up');
+  serviceItem.listeners.pointerdown({button: 0, clientX: 10, clientY: 10, preventDefault() {}});
+  documentListeners.pointerup({clientX: -10, clientY: -10});
+  assert.equal(workspace.getAllBlocks(false).length, 1, 'Canceled drop adds nothing');
+
+  // Exercise append behavior with pre-existing detached blocks and imported Inspector context.
+  for (const existingType of ['empty', 'image', 'service', 'network', 'compose']) {
+    for (const exampleId of ['service', 'network']) {
+      workspace.clear();
+      let existing;
+      if (existingType !== 'empty') {
+        existing = workspace.newBlock(existingType);
+        if (existingType === 'image') existing.setFieldValue('unrelated:keep', 'IMAGE');
+      }
+      const before = workspace.getAllBlocks(false).map(block => block.id);
+      context.loadDockerComposeExample(workspace, exampleId);
+      assert.ok(before.every(id => workspace.getBlockById(id)), 'Append preserves all existing blocks');
+      const added = workspace.getAllBlocks(false).find(block => block.type === exampleId && !before.includes(block.id));
+      assert.ok(added, 'The requested example block is created');
+      const created = workspace.getAllBlocks(false).filter(block => !before.includes(block.id));
+      assert.equal(created.filter(block => block.type === 'service').length, exampleId === 'service' ? 1 : 0, 'Network wrapper service is never inserted');
+      assert.equal(created.filter(block => block.type === 'network').length, exampleId === 'network' ? 1 : 0);
+      if (exampleId === 'service') {
+        assert.equal(added.getInputTargetBlock('CONFIG').getFieldValue('IMAGE'), 'node:20-alpine');
+      }
+      if (existingType === 'compose') assert.equal(existing.getInputTargetBlock('ELEMENTS'), added);
+      else assert.equal(added.getSurroundParent(), null, 'Example stays standalone without Compose');
+      if (existingType === 'image') {
+        assert.equal(existing.getSurroundParent(), null);
+        assert.equal(existing.getFieldValue('IMAGE'), 'unrelated:keep');
+      }
+    }
+  }
+  for (const exampleId of ['full-compose', 'service', 'network']) {
+    click('openImportYaml');
+    elements.importYamlText.value = 'services: {original: {image: nginx}}';
+    click('importYamlSubmit');
+    if (!elements.replaceWorkspaceDialog.hidden) click('confirmReplaceWorkspace');
+    assert.equal(elements.openImportInspector.disabled, false);
+    click('openImportInspector');
+    elements.exampleSelect.value = exampleId;
+    click('loadExample');
+    assertInspectorActionDisabled('Example clears stale import context');
+    assert.equal(elements.importInspectorDialog.hidden, true, 'Example closes stale inspector');
+    assert.equal(elements.importStatus.hidden, true);
+    assert.equal(elements.actionStatus.textContent, (exampleId === 'full-compose' ? 'Full Compose' : exampleId === 'service' ? 'Service' : 'Network') + ' loaded.');
+  }
+
   const html = read('blockly_app/index.html');
+  const css = read('blockly_app/src/styles/main.css');
+  const sprite = read('blockly_app/src/assets/icons.svg');
+  assert.equal(html.includes('<style>'), false);
+  assert.equal(html.includes('<symbol'), false);
+  for (const [, id] of html.matchAll(/icons.svg#([^" ]+)/g)) {
+    assert.ok(sprite.includes('id="' + id + '"'), 'Every external icon reference resolves');
+  }
+  assert.ok(sprite.includes('fill="currentColor" stroke="none"'), 'Logo fill is self-contained in external sprite');
   for (const id of [
     'openImportYaml', 'editYaml', 'openImportInspector', 'importInspectorDialog',
     'replaceWorkspaceDialog', 'confirmReplaceWorkspace', 'cancelReplaceWorkspace',
@@ -441,29 +519,29 @@ try {
   assert.ok(html.includes('docker-blocks-icon.svg'), 'Header/browser branding uses the Docker-Blocks icon');
   assert.ok(html.includes('icon-hierarchy') && html.includes('icon-sliders') && html.includes('icon-collection'), 'Toolbox category icons are distinct');
   assert.ok(html.includes('id="openImportInspector"') && html.includes('aria-disabled="true"') && html.includes('disabled'), 'YAML info action starts disabled in static markup');
-  assert.ok(html.includes('.yaml-button:disabled') && html.includes('cursor: not-allowed'), 'Disabled YAML info action has muted disabled styling');
+  assert.ok(css.includes('.yaml-button:disabled') && css.includes('cursor: not-allowed'), 'Disabled YAML info action has muted disabled styling');
   assert.ok(read('blockly_app/src/app-bootstrap.ts').includes('function updateImportInspectorAction'), 'Runtime controls YAML info action disabled state');
   assert.ok(read('blockly_app/src/app-bootstrap.ts').includes('maxTrashcanContents: 0'), 'Blockly trash history flyout is disabled');
-  assert.ok(html.includes('validation-panel-content') && html.includes('overflow-y: auto'), 'Validation body owns the scroll container');
-  assert.equal(/\.validation-panel-content\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(html), false, 'Validation scroll body avoids overlapping positioning');
-  assert.equal(/\.import-status\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(html), false, 'Import status remains in normal document flow');
-  assert.ok(/\.import-status\[hidden\]\s*\{[^}]*display:\s*none/.test(html), 'Hidden import status occupies no validation panel layout space');
-  assert.equal(/#errorOutput[\s\S]*overflow:\s*visible/.test(html), true, 'Validation cards remain normal-flow content inside the scroll body');
-  assert.ok(html.includes('.import-status-header'), 'Import status uses a header row for right-aligned actions');
+  assert.ok(html.includes('validation-panel-content') && css.includes('overflow-y: auto'), 'Validation body owns the scroll container');
+  assert.equal(/\.validation-panel-content\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(css), false, 'Validation scroll body avoids overlapping positioning');
+  assert.equal(/\.import-status\s*\{[^}]*position:\s*(absolute|sticky|fixed)/.test(css), false, 'Import status remains in normal document flow');
+  assert.ok(/\.import-status\[hidden\]\s*\{[^}]*display:\s*none/.test(css), 'Hidden import status occupies no validation panel layout space');
+  assert.equal(/#errorOutput[\s\S]*overflow:\s*visible/.test(css), true, 'Validation cards remain normal-flow content inside the scroll body');
+  assert.ok(css.includes('.import-status-header'), 'Import status uses a header row for right-aligned actions');
   assert.ok(
-    html.includes('.import-details-button') &&
-      html.includes('margin-left: auto') &&
-      html.includes('justify-content: flex-end') &&
-      html.includes('text-align: right'),
+    css.includes('.import-details-button') &&
+      css.includes('margin-left: auto') &&
+      css.includes('justify-content: flex-end') &&
+      css.includes('text-align: right'),
     'Import details action is lightweight and right-aligned'
   );
-  assert.ok(html.includes('max-height: min(90vh, 900px)'), 'Inspector modal is viewport bounded');
-  assert.ok(/#importInspectorBody\s*\{[^}]*overflow-y:\s*auto/.test(html), 'Inspector body owns the shared vertical scrollbar');
-  assert.equal(/\.import-code-view,[\s\S]*overflow-y:\s*visible/.test(html), true, 'Inspector panes do not create separate vertical scrollbars');
+  assert.ok(css.includes('max-height: min(90vh, 900px)'), 'Inspector modal is viewport bounded');
+  assert.ok(/#importInspectorBody\s*\{[^}]*overflow-y:\s*auto/.test(css), 'Inspector body owns the shared vertical scrollbar');
+  assert.equal(/\.import-code-view,[\s\S]*overflow-y:\s*visible/.test(css), true, 'Inspector panes do not create separate vertical scrollbars');
   const blockDefinitionSource = read('blockly_app/src/docker-block-definitions.ts');
   assert.ok(blockDefinitionSource.includes('"name": "CONFIG"'), 'Maintained Service uses dynamic CONFIG chain');
   assert.ok(blockDefinitionSource.includes('"name": "ELEMENTS"'), 'Maintained Compose uses dynamic ELEMENTS chain');
-  assert.ok(read('blockly_app/src/main.ts').includes('DOCKER_TOOLBOX'), 'Runtime main.ts uses centralized toolbox metadata');
+  assert.ok(read('blockly_app/src/main.ts').includes('DOCKER_BLOCK_DEFINITIONS'), 'Runtime main.ts registers maintained block definitions');
 
   console.log('[PASS] Final UI actions: dynamic examples, import inspector, bounded/resizable layout hooks, copy/download, maintained runtime wiring');
 } finally {
